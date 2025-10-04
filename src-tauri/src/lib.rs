@@ -1,36 +1,41 @@
-use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
+mod capture;
+mod config;
+mod system;
+mod utils;
+mod vlm;
 
-#[tauri::command]
-fn show_window(window: tauri::Window) -> Result<(), String> {
-    if window.is_visible().unwrap() {
-        return Ok(());
-    }
-    window.center().unwrap();
-    window.show_menu().unwrap();
-
-    window
-        .show()
-        .map_err(|e| format!("Failed to show window: {}", e))?;
-    window
-        .set_focus()
-        .map_err(|e| format!("Failed to set focus: {}", e))?;
-    Ok(())
-}
+use crate::config::AppState;
+use capture::*;
+use config::*;
+use dotenv::dotenv;
+use system::*;
+#[allow(unused_imports)]
+use utils::*;
+use vlm::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-
-
-
+    dotenv().ok();
 
     tauri::Builder::default()
-        .setup(|app| {
-            let tray = TrayIconBuilder::new().build(app)?;
-             Ok(())
-         })
+        .manage(AppState::default())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![show_window])
+        .invoke_handler(tauri::generate_handler![
+            show_window,
+            set_selected_language,
+            get_screen_capture_to_path,
+            get_screen_capture_to_bytes,
+            set_capture_position,
+            get_store_config,
+            set_selected_language_prompt,
+            create_screenshot_solution_stream
+        ])
+        .setup(|app| {
+            create_tray_icon(app);
+            create_shortcut(app);
+            load_preferences(app);
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

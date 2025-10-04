@@ -7,3 +7,7 @@
 /gen/schemas
 target
 .env
+asset
+assets
+dist
+node_modules
