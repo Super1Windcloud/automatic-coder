@@ -14,17 +14,22 @@
       {
         "title": "interview-coder",
         "width": 800,
-        "height": 600,
+        "height": 50,
         "resizable": true,
         "fullscreen": false,
-        "center": true,
+        "center": false,
         "transparent": true,
         "visible": false,
         "alwaysOnTop": true,
         "contentProtected": true,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "decorations": false,
+        "focusable": false,
+        "focus" : false,
+        "acceptFirstMouse": false
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     }
