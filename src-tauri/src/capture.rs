@@ -2,6 +2,7 @@ use crate::config::{AppState, DirectionEnum};
 use fs_extra::dir;
 use image::ImageFormat;
 use std::io::Cursor;
+use tauri::path::BaseDirectory;
 use tauri::State;
 use xcap::Monitor;
 
@@ -51,11 +52,22 @@ pub fn get_screen_capture_to_bytes(states: State<AppState>) -> Vec<u8> {
     let (x, y, w, h) = get_region(monitor_width, monitor_height, &direction);
     let image = monitor.capture_region(x as u32, y as u32, w, h).unwrap();
 
+    #[cfg(target_os = "windows")]
     let file_path = format!(
         "assets/monitor-{}-{:?}.png",
         normalized(monitor.name().unwrap()),
         &direction
     );
+    #[cfg(target_os = "macos")]
+    {
+        let data_dir = app
+            .path()
+            .resolve("assets", BaseDirectory::AppData)
+            .unwrap();
+        std::fs::create_dir_all(&data_dir).unwrap();
+        let file_path = data_dir.join("monitor.png");
+    }
+
     image.save(&file_path).unwrap();
     let mut buf = Cursor::new(Vec::new());
     image.write_to(&mut buf, ImageFormat::Png).unwrap();

@@ -1,4 +1,4 @@
-use crate::config::{PreferencesConfig};
+use crate::config::PreferencesConfig;
 use confy::load as load_config;
 use std::env;
 use std::fs::OpenOptions;
