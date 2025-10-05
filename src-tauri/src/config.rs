@@ -55,6 +55,9 @@ pub fn get_store_config() -> String {
 
 #[tauri::command]
 pub fn set_vlm_key(key: String) {
+    if key.is_empty() {
+        return;
+    }
     let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences").unwrap();
     cfg.vlm_key = key;
     confy::store("interview-coder-config", "preferences", cfg).unwrap();
@@ -89,6 +92,7 @@ pub fn set_selected_language_prompt(state: State<AppState>, window: tauri::Windo
     confy::store("interview-coder-config", "preferences", cfg).unwrap();
     println!("current prompt: {}", state.prompt.lock().unwrap());
     if let Some(window) = window.get_webview_window("code_language_selector") {
+        window.hide().unwrap();
         window.close().unwrap();
     }
 }
@@ -120,6 +124,7 @@ pub fn open_language_selector(app_handle: &AppHandle) {
     };
 
     let webview_window = WebviewWindowBuilder::new(app_handle, "code_language_selector", url)
+        .inner_size(800.0, 600.0)
         .build()
         .unwrap();
 

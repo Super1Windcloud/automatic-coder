@@ -2,7 +2,7 @@
 use crate::utils::toggle_webview_devtools;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{App, Manager, Position, Wry};
+use tauri::{App, AppHandle, Manager, Position, Wry};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 #[tauri::command]
@@ -33,12 +33,23 @@ pub fn show_window(window: tauri::Window) -> Result<(), String> {
 }
 
 pub fn create_shortcut(app: &mut App<Wry>) {
+    #[cfg(target_os = "windows")]
     let hide_or_show_shortcut =
         Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyQ);
-    let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::F12);
+    #[cfg(target_os = "macos")]
+    let hide_or_show_shortcut = Shortcut::new(Some(Modifiers::META | Modifiers::ALT), Code::KeyQ);
 
+    #[cfg(target_os = "windows")]
+    let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::F12);
+    #[cfg(target_os = "macos")]
+    let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::META), Code::F12);
+
+    #[cfg(target_os = "windows")]
     let open_language_window =
         Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyP);
+    #[cfg(target_os = "macos")]
+    let open_language_window = Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::KeyP);
+
     app.handle()
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -88,6 +99,15 @@ pub fn create_shortcut(app: &mut App<Wry>) {
         .unwrap();
 }
 
+fn graceful_exit(app: &AppHandle) {
+    for window in app.webview_windows().values() {
+        let _ = window.hide();
+        let _ = window.close();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    app.exit(0);
+}
+
 pub fn create_tray_icon(app: &mut App<Wry>) {
     let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>).unwrap();
     let code_language =
@@ -100,7 +120,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         .icon(app.default_window_icon().unwrap().clone())
         .on_menu_event(|app, event| match event.id.as_ref() {
             "quit" => {
-                app.exit(0);
+                graceful_exit(app);
             }
             "code_language" => {
                 open_language_selector(app);

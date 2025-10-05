@@ -1,4 +1,4 @@
-use crate::config::{load_preferences, PreferencesConfig};
+use crate::config::PreferencesConfig;
 use confy::load as load_config;
 use std::env;
 use std::fs::OpenOptions;
@@ -28,7 +28,7 @@ pub fn get_env_key(key_name: &str) -> String {
             if !is_dev() {
                 write_some_log(&format!("环境变量 {} 未设置，请设置后重试", key_name))
             };
-            String::from("sk-pakzoefbduyiqonsznhvnyczilfcjwefjolbvjslcliafefk")
+            "".to_string()
         } else {
             result.vlm_key.to_string()
         }
