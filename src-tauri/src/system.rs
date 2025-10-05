@@ -33,12 +33,23 @@ pub fn show_window(window: tauri::Window) -> Result<(), String> {
 }
 
 pub fn create_shortcut(app: &mut App<Wry>) {
+    #[cfg(target_os = "windows")]
     let hide_or_show_shortcut =
         Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyQ);
-    let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::F12);
+    #[cfg(target_os = "macos")]
+    let hide_or_show_shortcut = Shortcut::new(Some(Modifiers::META | Modifiers::ALT), Code::KeyQ);
 
+    #[cfg(target_os = "windows")]
+    let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::F12);
+    #[cfg(target_os = "macos")]
+    let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::META), Code::F12);
+
+    #[cfg(target_os = "windows")]
     let open_language_window =
         Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyP);
+    #[cfg(target_os = "macos")]
+    let open_language_window = Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::KeyP);
+
     app.handle()
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
