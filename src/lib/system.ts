@@ -6,9 +6,11 @@ import {
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useAppStateStoreWithNoHook } from "@/store";
 let lastHeight = 0;
-export async function resetWindow() {
+
+export async function resetWindow(offsetCallback: () => void) {
   await getCurrentWindow().setSize(new LogicalSize(800, 50));
   await getCurrentWindow().setPosition(new LogicalPosition(100, 50));
+  offsetCallback();
   useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath("");
   useAppStateStoreWithNoHook.getState().updateStartShowSolution(false);
 }

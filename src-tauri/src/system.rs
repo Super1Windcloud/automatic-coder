@@ -50,6 +50,16 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                             }
                             ShortcutState::Released => {
                                 let window = _app.get_webview_window("main").unwrap();
+                                let config_window =
+                                    _app.get_webview_window("code_language_selector");
+                                if config_window.is_some() {
+                                    let config_window = config_window.unwrap();
+                                    if config_window.is_visible().unwrap() {
+                                        config_window.hide().unwrap();
+                                    } else {
+                                        config_window.show().unwrap();
+                                    }
+                                }
                                 if window.is_visible().unwrap() {
                                     window.hide().unwrap();
                                 } else {

@@ -1,6 +1,7 @@
 ﻿use std::sync::Mutex;
 use tauri::{App, AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
+use crate::utils::is_dev;
 use confy::load as load_config;
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +10,7 @@ pub struct PreferencesConfig {
     direction_enum: DirectionEnum,
     code_language: String,
     prompt: String,
+    pub vlm_key: String,
 }
 #[derive(Default, Debug)]
 pub struct AppState {
@@ -49,6 +51,13 @@ pub fn get_store_config() -> String {
     let result: PreferencesConfig = load_config("interview-coder-config", "preferences").unwrap();
     let result_str = serde_json::to_string(&result).unwrap();
     result_str
+}
+
+#[tauri::command]
+pub fn set_vlm_key(key: String) {
+    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences").unwrap();
+    cfg.vlm_key = key;
+    confy::store("interview-coder-config", "preferences", cfg).unwrap();
 }
 
 #[tauri::command]
@@ -96,17 +105,23 @@ pub fn open_language_selector(app_handle: &AppHandle) {
         .get_webview_window("code_language_selector")
         .is_some()
     {
-        println!("窗口已存在");
+        app_handle
+            .get_webview_window("code_language_selector")
+            .unwrap()
+            .set_always_on_top(true)
+            .unwrap();
         return;
     }
 
-    let webview_window = WebviewWindowBuilder::new(
-        app_handle,
-        "code_language_selector",
-        WebviewUrl::App("select.html".into()),
-    )
-    .build()
-    .unwrap();
+    let url = if is_dev() {
+        WebviewUrl::App("select.html".into())
+    } else {
+        WebviewUrl::App("select/select.html".into())
+    };
+
+    let webview_window = WebviewWindowBuilder::new(app_handle, "code_language_selector", url)
+        .build()
+        .unwrap();
 
     webview_window.center().unwrap();
     webview_window.set_focus().unwrap();

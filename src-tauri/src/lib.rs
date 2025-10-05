@@ -28,7 +28,8 @@ pub fn run() {
             set_capture_position,
             get_store_config,
             set_selected_language_prompt,
-            create_screenshot_solution_stream
+            create_screenshot_solution_stream,
+            set_vlm_key
         ])
         .setup(|app| {
             create_tray_icon(app);

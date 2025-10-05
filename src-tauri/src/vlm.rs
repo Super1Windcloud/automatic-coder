@@ -1,5 +1,5 @@
 use crate::config::AppState;
-use crate::utils::get_env_key;
+use crate::utils::{get_env_key, is_dev, write_some_log};
 use base64::{engine::general_purpose, Engine};
 use reqwest::Client;
 use serde_json::json;
@@ -255,7 +255,9 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> String 
     let assets_path = Path::new("assets");
     let state = app_handle.state::<AppState>();
     let prompt = state.prompt.lock().unwrap().clone();
-
+    if !is_dev() {
+        write_some_log(assets_path.to_str().unwrap())
+    }
     let entries: Vec<_> = std::fs::read_dir(assets_path)
         .unwrap()
         .filter_map(Result::ok)
@@ -267,6 +269,9 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> String 
         .collect();
 
     if let Some(first_image) = entries.first() {
+        if !is_dev() {
+            write_some_log(first_image.path().to_str().unwrap())
+        }
         let bytes = std::fs::read(first_image.path()).unwrap();
         let base64_str = general_purpose::STANDARD.encode(&bytes);
         let base64 = format!("data:image/png;base64,{}", base64_str);

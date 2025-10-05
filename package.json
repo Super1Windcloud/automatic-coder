@@ -16,7 +16,9 @@
     "icon": "tauri icon  app-icon.png",
     "prepare": "husky",
     "lint": "eslint  src --fix && cd src-tauri && cargo check",
-    "format": "prettier --write src && cd src-tauri &&  cargo fmt"
+    "format": "prettier --write src && cd src-tauri &&  cargo fmt",
+    "build:select": "vite build --config vite.select.config.ts",
+    "custom": "pnpm build && pnpm build:select"
   },
   "dependencies": {
     "@lexical/markdown": "^0.36.2",

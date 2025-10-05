@@ -22,7 +22,11 @@ const result = await getCurrentWindow().innerPosition();
 export async function registryGlobalShortcut() {
   await register("Alt+2", (event) => {
     if (event.state === "Released") {
-      resetWindow();
+      resetWindow(async () => {
+        lastX = lastY = 0;
+        const result = await getCurrentWindow().innerPosition();
+        [windowX, windowY] = [result.x, result.y];
+      });
     }
   });
 

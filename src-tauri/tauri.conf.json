@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "interview-coder",
+  "productName": "Interview-Coder",
   "version": "0.1.0",
   "identifier": "com.superuse.interview-coder",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm custom",
     "frontendDist": "../dist"
   },
   "app": {
@@ -25,7 +25,7 @@
         "skipTaskbar": true,
         "decorations": false,
         "focusable": false,
-        "focus" : false,
+        "focus": false,
         "acceptFirstMouse": false
       }
     ],
@@ -44,5 +44,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+
   }
 }

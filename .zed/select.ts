@@ -1,5 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { getLLMPrompts } from "@/assets/constant.ts";
+
+export const getLLMPrompts = (language: string) =>
+  `你是一名参加秋招笔试的程序员,图中可能有选择题和算法题,如果是选择题请直接给出答案和简要解析,如果是算法题请使用${language}完成图中的算法题,给出代码和解题思路`;
+
 
 const selectButton = document.getElementById("select-button");
 const languageSelect = document.getElementById("language-select");
