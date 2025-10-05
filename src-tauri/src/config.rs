@@ -136,3 +136,11 @@ pub fn open_language_selector(app_handle: &AppHandle) {
     webview_window.set_enabled(true).unwrap();
     webview_window.show().unwrap();
 }
+
+#[test]
+fn output_config_path() {
+    use confy::get_configuration_file_path;
+
+    let result = get_configuration_file_path("interview-coder-config", "preferences").unwrap();
+    println!("Config path: {}", result.to_str().unwrap());
+}
