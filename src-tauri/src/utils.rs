@@ -3,6 +3,7 @@ use confy::load as load_config;
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
 pub fn toggle_webview_devtools(app: &AppHandle) {
@@ -31,6 +32,13 @@ pub fn get_env_key(key_name: &str) -> String {
             // open_language_selector(app.handle());
             "".to_string()
         } else {
+            #[cfg(target_os = "macos")]
+            if !is_dev() {
+                write_some_log(&format!(
+                    "环境变量 {} 已设置，值为 {}",
+                    key_name, result.vlm_key
+                ))
+            }
             result.vlm_key.to_string()
         }
     })
@@ -41,13 +49,30 @@ pub fn is_dev() -> bool {
 }
 
 pub fn write_some_log(msg: &str) {
-    let mut file = OpenOptions::new()
-        .create(true) // 文件不存在则创建
-        .append(true) // 追加写入
-        .open("app.log") // 日志文件名
-        .unwrap();
+    #[cfg(target_os = "macos")]
+    {
+        let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
+        let mut path = PathBuf::from(log_dir);
+        path.push("interview_coder_app.log");
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .unwrap();
 
-    writeln!(file, "{}", msg).unwrap(); // 写入一行
+        writeln!(file, "{}", msg).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut file = OpenOptions::new()
+            .create(true) // 文件不存在则创建
+            .append(true) // 追加写入
+            .open("app.log") // 日志文件名
+            .unwrap();
+
+        writeln!(file, "{}", msg).unwrap(); // 写入一行
+    }
 }
 
 #[test]

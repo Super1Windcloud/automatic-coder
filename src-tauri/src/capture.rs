@@ -1,8 +1,8 @@
 use crate::config::{AppState, DirectionEnum};
+use crate::utils::write_some_log;
 use fs_extra::dir;
 use image::ImageFormat;
 use std::io::Cursor;
-use tauri::path::BaseDirectory;
 use tauri::State;
 use xcap::Monitor;
 
@@ -35,9 +35,8 @@ fn get_region(
 }
 
 #[tauri::command]
-pub fn get_screen_capture_to_bytes(states: State<AppState>) -> Vec<u8> {
+pub fn get_screen_capture_to_bytes(states: State<AppState>, _app: tauri::AppHandle) -> Vec<u8> {
     let monitors = Monitor::all().unwrap();
-    dir::create_all("assets", true).unwrap();
 
     let monitor = monitors
         .into_iter()
@@ -53,25 +52,38 @@ pub fn get_screen_capture_to_bytes(states: State<AppState>) -> Vec<u8> {
     let image = monitor.capture_region(x as u32, y as u32, w, h).unwrap();
 
     #[cfg(target_os = "windows")]
-    let file_path = format!(
-        "assets/monitor-{}-{:?}.png",
-        normalized(monitor.name().unwrap()),
-        &direction
-    );
-    #[cfg(target_os = "macos")]
     {
-        let data_dir = app
-            .path()
-            .resolve("assets", BaseDirectory::AppData)
-            .unwrap();
-        std::fs::create_dir_all(&data_dir).unwrap();
-        let file_path = data_dir.join("monitor.png");
+        dir::create_all("assets", true).unwrap();
+        let file_path = format!(
+            "assets/monitor-{}-{:?}.png",
+            crate::capture::normalized(monitor.name().unwrap()),
+            &direction
+        );
+        image.save(&file_path).unwrap();
+        let mut buf = Cursor::new(Vec::new());
+        image.write_to(&mut buf, ImageFormat::Png).unwrap();
+        buf.into_inner()
     }
 
-    image.save(&file_path).unwrap();
-    let mut buf = Cursor::new(Vec::new());
-    image.write_to(&mut buf, ImageFormat::Png).unwrap();
-    buf.into_inner()
+    #[cfg(target_os = "macos")]
+    {
+        let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
+        let assets = log_dir.join("assets");
+        dir::create_all(assets.as_path(), true).unwrap();
+
+        let file_path = format!(
+            "monitor-{}-{:?}.png",
+            normalized(monitor.name().unwrap()),
+            &direction
+        );
+        let file_path = assets.join(file_path);
+        write_some_log(file_path.to_str().unwrap());
+
+        image.save(&file_path).unwrap();
+        let mut buf = Cursor::new(Vec::new());
+        image.write_to(&mut buf, ImageFormat::Png).unwrap();
+        buf.into_inner()
+    }
 }
 
 #[tauri::command]
@@ -103,4 +115,12 @@ pub fn get_screen_capture_to_path(states: State<AppState>) -> String {
         .to_str()
         .unwrap()
         .to_string()
+}
+
+
+#[test]
+fn test_prod_asset_file(){
+    let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
+    let assets = log_dir.join("assets");
+    println!("assets dir: {}", assets.display());
 }

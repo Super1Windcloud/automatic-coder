@@ -252,7 +252,16 @@ async fn request_chat_completion_stream(
 
 #[tauri::command]
 pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> String {
-    let assets_path = Path::new("assets");
+    let assets_path = if cfg!(target_os = "windows") {
+        Path::new("assets").to_path_buf()
+    } else if cfg!(target_os = "macos") {
+        let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
+        let assets = log_dir.join("assets");
+        assets.to_path_buf()
+    } else {
+        write_some_log("unknown platform to support");
+        std::process::exit(1);
+    };
     let state = app_handle.state::<AppState>();
     let prompt = state.prompt.lock().unwrap().clone();
     if !is_dev() {
