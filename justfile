@@ -4,6 +4,7 @@ default:
 
 
 push :
+  git pull repo master
   git add .
   git commit -m "update"
   git push repo  master
