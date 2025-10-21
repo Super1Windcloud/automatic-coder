@@ -3,6 +3,7 @@ use confy::load as load_config;
 use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
+#[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 

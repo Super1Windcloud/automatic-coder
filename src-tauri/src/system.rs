@@ -19,15 +19,13 @@ pub fn show_window(window: tauri::Window) -> Result<(), String> {
         .show()
         .map_err(|e| format!("Failed to show window: {}", e))?;
 
-    use window_vibrancy::*;
-
-    #[cfg(target_os = "macos")]
-    apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None)
-        .expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
-
-    #[cfg(target_os = "windows")]
-    apply_acrylic(&window, None)
-        .expect("Unsupported platform! 'apply_blur' is only supported on Windows");
+    //     #[cfg(target_os = "macos")]
+    //     apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None)
+    //         .expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
+    //
+    //     #[cfg(target_os = "windows")]
+    //     apply_acrylic(&window, None)
+    //         .expect("Unsupported platform! 'apply_blur' is only supported on Windows");
 
     Ok(())
 }
@@ -35,20 +33,19 @@ pub fn show_window(window: tauri::Window) -> Result<(), String> {
 pub fn create_shortcut(app: &mut App<Wry>) {
     #[cfg(target_os = "windows")]
     let hide_or_show_shortcut =
-        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyQ);
+        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Backquote);
     #[cfg(target_os = "macos")]
-    let hide_or_show_shortcut = Shortcut::new(Some(Modifiers::META | Modifiers::ALT), Code::KeyQ);
+    let hide_or_show_shortcut =
+        Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::Backquote);
 
     #[cfg(target_os = "windows")]
     let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::F12);
     #[cfg(target_os = "macos")]
     let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::META), Code::F12);
 
-    #[cfg(target_os = "windows")]
-    let open_language_window =
-        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyP);
-    #[cfg(target_os = "macos")]
-    let open_language_window = Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::KeyP);
+    let open_language_window = Shortcut::new(Some(Modifiers::ALT), Code::Digit3);
+
+    let quit_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Digit4);
 
     app.handle()
         .plugin(
@@ -82,6 +79,8 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                         toggle_webview_devtools(_app)
                     } else if shortcut == &open_language_window {
                         open_language_selector(_app)
+                    } else if shortcut == &quit_shortcut {
+                        graceful_exit(_app)
                     }
                 })
                 .build(),
@@ -97,6 +96,7 @@ pub fn create_shortcut(app: &mut App<Wry>) {
     app.global_shortcut()
         .register(open_language_window)
         .unwrap();
+    app.global_shortcut().register(quit_shortcut).unwrap();
 }
 
 fn graceful_exit(app: &AppHandle) {
@@ -109,9 +109,9 @@ fn graceful_exit(app: &AppHandle) {
 }
 
 pub fn create_tray_icon(app: &mut App<Wry>) {
-    let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>).unwrap();
+    let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+4")).unwrap();
     let code_language =
-        MenuItem::with_id(app, "code_language", "偏好设置", true, Some("CTRL+SHIFT+P")).unwrap();
+        MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();
     let menu = Menu::with_items(app, &[&code_language, &quit_i]).unwrap();
 
     TrayIconBuilder::new()

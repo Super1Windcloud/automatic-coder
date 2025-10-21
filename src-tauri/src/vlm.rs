@@ -31,7 +31,7 @@ async fn request_chat_completion(prompt: String, image_url: String) -> String {
     let client = Client::new();
 
     let body = json!({
-        "model": "zai-org/GLM-4.5V",
+        "model": "Qwen/Qwen3-VL-235B-A22B-Instruct",
         "thinking_budget": 4096,
         "top_p": 0.7,
         "temperature": 0.7,
@@ -102,7 +102,8 @@ async fn request_chat_completion_stream_thinking(prompt: String, image_url: Stri
     let client = Client::new();
     let body = json!({
         // "model": "stepfun-ai/step3",
-        "model": "zai-org/GLM-4.5V",
+        "model":"Qwen/Qwen3-VL-235B-A22B-Instruct", 
+        // "model": "zai-org/GLM-4.5V",
         "top_p": 0.7,
         "temperature": 0.7,
         "top_k": 50,
@@ -196,6 +197,7 @@ async fn request_chat_completion_stream(
     let api_key = get_env_key("SiliconflowVLM");
     let client = Client::new();
 
+    // Qwen/Qwen3-VL-235B-A22B-Instruct
     let body = json!({
         "model": if !thinking{  "zai-org/GLM-4.5V" } else { "stepfun-ai/step3" },
         "thinking_budget": 4096,
@@ -330,6 +332,7 @@ fn calc_cost<T: ToF64, U: ToF64>(input_tokens: T, output_tokens: U) -> f64 {
     result
 }
 
+///cargo test vlm::test_request_chat_completion_stream
 #[tokio::test]
 async fn test_request_chat_completion_stream() {
     use dotenv::dotenv;
@@ -341,5 +344,5 @@ async fn test_request_chat_completion_stream() {
     let prompt = "请用Java完成图中的算法题,给出解题思路和最终代码";
     let base64 = format!("data:image/png;base64,{}", base64);
 
-    request_chat_completion_stream_thinking(prompt.into(), base64).await;
+    request_chat_completion(prompt.into(), base64).await;
 }

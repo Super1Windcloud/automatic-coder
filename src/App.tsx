@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound";
 import { ignoreMouseEvents } from "@/lib/system.ts";
 import { registryGlobalShortcut } from "@/lib/shortcut.ts";
 
+
 const queryClient = new QueryClient();
 
 const MainApp = ({

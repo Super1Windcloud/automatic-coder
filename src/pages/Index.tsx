@@ -56,9 +56,10 @@ const Index = ({
     <div
       style={{
         scrollbarWidth: "none",
-        overflow: "hidden",
+        width: "100vw",
+        height: "100vh",
+        background: "linear-gradient(to bottom, #724766, #2C4F71)",
       }}
-      className="bg-background"
     >
       <div
         style={{
@@ -68,27 +69,46 @@ const Index = ({
           justifyContent: "space-evenly",
           alignItems: "center",
           scrollbarWidth: "none",
-          overflow: "hidden",
+          position: "relative",
+          paddingLeft: "1rem", // px-4
+          paddingRight: "1rem",
+          paddingTop: "0.5rem", // py-2
+          paddingBottom: "0.5rem",
+          boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)", // shadow-sm
+          backdropFilter: "blur(12px)", // backdrop-blur-md
+          backgroundColor: "rgba(255, 255, 255, 0.1)", // bg-white/10
+          border: "1px solid rgba(255, 255, 255, 0.1)", // border border-white/10
         }}
       >
         <span>截图(Alt+1)</span>
-        <span>答案(Ctrl+Enter)</span>
+        <span>答案(Alt+2)</span>
         <span>移动(Alt+↕↔)</span>
-        <span>重置(Alt+2)</span>
-        <span>隐藏(Ctrl+Alt+Q)</span>
+        <span>重置(Alt+`)</span>
+        <span>隐藏(Ctrl+Shift+`)</span>
       </div>
       {currentScreenShotPath && (
-        <img
+        <div
           style={{
-            objectFit: "cover",
-            height: 100,
-            marginTop: 10,
-            marginLeft: 40,
+            margin: 0,
+            padding: 0,
+            scrollbarWidth: "none",
           }}
-          src={currentScreenShotPath}
-          alt="screenshot"
-        />
+        >
+          (
+          <img
+            style={{
+              objectFit: "cover",
+              height: 100,
+              marginTop: 10,
+              marginLeft: 40,
+            }}
+            src={currentScreenShotPath}
+            alt="screenshot"
+          />
+          )
+        </div>
       )}
+
       {hasSolution && solutionContent && (
         <MarkdownPreview content={solutionContent} />
       )}

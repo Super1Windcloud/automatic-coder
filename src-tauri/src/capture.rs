@@ -1,4 +1,5 @@
 use crate::config::{AppState, DirectionEnum};
+#[cfg(target_os = "macos")]
 use crate::utils::write_some_log;
 use fs_extra::dir;
 use image::ImageFormat;
@@ -117,9 +118,8 @@ pub fn get_screen_capture_to_path(states: State<AppState>) -> String {
         .to_string()
 }
 
-
 #[test]
-fn test_prod_asset_file(){
+fn test_prod_asset_file() {
     let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
     let assets = log_dir.join("assets");
     println!("assets dir: {}", assets.display());

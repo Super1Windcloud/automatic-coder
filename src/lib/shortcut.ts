@@ -20,7 +20,7 @@ const result = await getCurrentWindow().innerPosition();
 [windowX, windowY] = [result.x, result.y];
 
 export async function registryGlobalShortcut() {
-  await register("Alt+2", (event) => {
+  await register("Alt+`", (event) => {
     if (event.state === "Released") {
       resetWindow(async () => {
         lastX = lastY = 0;
@@ -30,7 +30,7 @@ export async function registryGlobalShortcut() {
     }
   });
 
-  await register("CommandOrControl+Enter", async (event) => {
+  await register("Alt+2", async (event) => {
     if (event.state === "Released") {
       const result = await getCurrentWindow().innerPosition();
       [lastX, lastY] = [result.x, result.y];

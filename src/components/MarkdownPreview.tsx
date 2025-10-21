@@ -6,8 +6,8 @@ export function MarkdownPreview({ content }: { content: string }) {
       source={content}
       style={{
         padding: 16,
-        backgroundColor: "transparent",
         scrollbarWidth: "none",
+        backgroundColor: "transparent",
       }}
     />
   );
