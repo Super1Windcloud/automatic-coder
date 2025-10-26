@@ -8,7 +8,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { ignoreMouseEvents } from "@/lib/system.ts";
 import { registryGlobalShortcut } from "@/lib/shortcut.ts";
-
+import { useAsync } from "react-use";
 
 const queryClient = new QueryClient();
 
@@ -58,8 +58,8 @@ function App() {
     });
   }, []);
 
-  useEffect(() => {
-    invoke("show_window");
+  useAsync(async () => {
+    await invoke("show_window");
   }, []);
 
   return <MainApp hasSolution={hasSolution} setHasSolution={setHasSolution} />;

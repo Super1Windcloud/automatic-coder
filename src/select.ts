@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { getLLMPrompts } from "@/assets/constant.ts";
+import { getLLMPrompts, templatePattern } from "@/assets/constant.ts";
 
 const selectButton = document.getElementById("select-button");
 const languageSelect = document.getElementById("language-select");
@@ -10,10 +10,24 @@ selectButton?.addEventListener("click", async () => {
   const selectedLanguage = (languageSelect as HTMLSelectElement).value;
   const llmPrompt = (promptInput as HTMLInputElement).value.trim();
   const selectedDirection = (directionSelect as HTMLSelectElement).value;
-  const prompt = llmPrompt || getLLMPrompts(selectedLanguage);
+
   const vlmKey = (vlmKeyInput as HTMLInputElement).value.trim();
 
+  const prompt = templatePattern.test(llmPrompt)
+    ? getLLMPrompts(selectedLanguage)
+    : llmPrompt || getLLMPrompts(selectedLanguage);
+
   try {
+    if (process.env.NODE_ENV === "development") {
+      alert(
+        JSON.stringify({
+          vlmKey,
+          selectedLanguage,
+          selectedDirection,
+          prompt,
+        }),
+      );
+    }
     await invoke("set_capture_position", {
       position: selectedDirection,
     });
@@ -23,6 +37,7 @@ selectButton?.addEventListener("click", async () => {
     await invoke("set_vlm_key", {
       key: vlmKey,
     });
+
     await invoke("set_selected_language_prompt", {
       prompt,
     });

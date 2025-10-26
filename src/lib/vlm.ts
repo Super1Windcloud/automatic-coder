@@ -1,16 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 
 export async function getScreenShotSolutionFromVLM(
   renderCallBack: (content: string) => void,
 ) {
   let content = "";
-
-  const unlistenFn = await listen("completion_stream", (event) => {
+  const unlistenFn: UnlistenFn = await listen("completion_stream", (event) => {
     content += event.payload;
     content = content
       .replace("<|begin_of_box|>", "")
       .replace("<|end_of_box|>", "");
+
     renderCallBack(content);
   });
 
@@ -23,4 +23,5 @@ export async function getScreenShotSolutionFromVLM(
     .finally(() => {
       unlistenFn();
     });
+  return unlistenFn;
 }

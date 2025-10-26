@@ -4,6 +4,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useAppStateStoreWithNoHook } from "@/store";
 import { showSolutionWindow } from "@/lib/system.ts";
 import { getScreenShotSolutionFromVLM } from "@/lib/vlm.ts";
+import { useAsync } from "react-use";
+import { UnlistenFn } from "@tauri-apps/api/event";
 
 const Index = ({
   hasSolution,
@@ -21,6 +23,7 @@ const Index = ({
     () => useAppStateStoreWithNoHook.getState().startShowSolution, // selector
   );
   const [solutionContent, setSolutionContent] = useState<string>("");
+  const [unlistenFn, setUnlistenFn] = useState<UnlistenFn | null>(null);
 
   useEffect(() => {
     setSolutionContent("");
@@ -31,20 +34,31 @@ const Index = ({
     }
   }, [currentScreenShotPath]);
 
-  useEffect(() => {
-    showSolutionWindow();
+  useAsync(async () => {
+    await showSolutionWindow();
 
     if (hasSolution && startShowSolution) {
-      getScreenShotSolutionFromVLM((content: string) => {
-        setSolutionContent(content);
-        showSolutionWindow();
-      });
+      const unlistener = await getScreenShotSolutionFromVLM(
+        (content: string) => {
+          setSolutionContent(content);
+          showSolutionWindow();
+        },
+      );
+      // 如果是 setUnlistenFn(unlistener); 会转换为 setUnlistenFn(prev => unlistener(prev)); 会立刻执行
+      setUnlistenFn(() => unlistener);
     } else {
       setSolutionContent("");
     }
   }, [hasSolution, startShowSolution]);
 
   useEffect(() => {
+    if (!startShowSolution && unlistenFn) {
+      unlistenFn();
+      setUnlistenFn(null);
+    }
+  }, [unlistenFn, startShowSolution]);
+
+  useAsync(async () => {
     // 防抖
     const timeout = setTimeout(() => {
       showSolutionWindow();

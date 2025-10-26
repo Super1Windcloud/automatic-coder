@@ -102,7 +102,7 @@ async fn request_chat_completion_stream_thinking(prompt: String, image_url: Stri
     let client = Client::new();
     let body = json!({
         // "model": "stepfun-ai/step3",
-        "model":"Qwen/Qwen3-VL-235B-A22B-Instruct", 
+        "model":"Qwen/Qwen3-VL-235B-A22B-Instruct",
         // "model": "zai-org/GLM-4.5V",
         "top_p": 0.7,
         "temperature": 0.7,
