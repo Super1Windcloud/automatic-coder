@@ -1,10 +1,12 @@
 import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { ignoreMouseEvents } from "@/lib/system.ts";
+import { ignoreMouseEvents, startMouseEvents } from "@/lib/system.ts";
 import { openUpdateWindow } from "@/components/AudoUpdater.tsx";
 
 export async function checkCurrentAppUpdate() {
   try {
+    startMouseEvents("updater").catch((err) => {
+      console.error("start mouse", err as string);
+    });
     const update = await check();
 
     if (!update) {
@@ -18,9 +20,11 @@ export async function checkCurrentAppUpdate() {
         console.error("打开更新窗口失败：", err);
       })
       .finally(async () => {
-        await ignoreMouseEvents();
+        await ignoreMouseEvents("main");
       });
   } catch (err) {
     console.error("检查更新失败：", err);
   }
 }
+
+

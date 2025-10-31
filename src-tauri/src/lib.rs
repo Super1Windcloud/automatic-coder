@@ -30,7 +30,8 @@ pub fn run() {
             get_store_config,
             set_selected_language_prompt,
             create_screenshot_solution_stream,
-            set_vlm_key
+            set_vlm_key,
+            append_app_log
         ])
         .setup(|app| {
             create_tray_icon(app);

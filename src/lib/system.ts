@@ -3,6 +3,7 @@ import {
   LogicalPosition,
   LogicalSize,
 } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useAppStateStoreWithNoHook } from "@/store";
 let lastHeight = 0;
@@ -25,12 +26,31 @@ export async function showSolutionWindow() {
   await window.setSize(new LogicalSize(800, contentHeight));
 }
 
-export async function ignoreMouseEvents() {
-  await getCurrentWindow().setIgnoreCursorEvents(true);
+async function resolveWindow(label?: string) {
+  if (!label) {
+    return getCurrentWindow();
+  }
+  try {
+    const win = await WebviewWindow.getByLabel(label);
+    if (win) {
+      return win;
+    }
+  } catch (error) {
+    console.warn(`查找窗口 ${label} 失败：`, error);
+  }
+  return null;
 }
 
-export async function startMouseEvents() {
-  await getCurrentWindow().setIgnoreCursorEvents(false);
+export async function ignoreMouseEvents(label?: string) {
+  const win = await resolveWindow(label);
+  if (!win) return;
+  await win.setIgnoreCursorEvents(true);
+}
+
+export async function startMouseEvents(label?: string) {
+  const win = await resolveWindow(label);
+  if (!win) return;
+  await win.setIgnoreCursorEvents(false);
 }
 async function getWebViewHeight() {
   return document.documentElement.scrollHeight;

@@ -1,7 +1,7 @@
 {
   "name": "interview-coder",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "superwindcloud",
     "email": "ss1178933440@gmail.com"
@@ -20,7 +20,8 @@
     "format": "prettier --write src && cd src-tauri &&  cargo fmt",
     "build:select": "vite build --config vite.select.config.ts",
     "custom": "pnpm build && pnpm build:select",
-    "sign": "pnpm tauri signer generate -w ~/.tauri/interview_code.key"
+    "sign": "pnpm tauri signer generate -w ~/.tauri/interview_code.key",
+    "release": "cd src-tauri && cargo build --release"
   },
   "dependencies": {
     "@lexical/markdown": "^0.36.2",

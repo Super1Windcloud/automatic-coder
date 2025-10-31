@@ -4,6 +4,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ignoreMouseEvents } from "@/lib/system.ts";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
 
 type UpdateStatus =
   | "checking"
@@ -19,36 +20,70 @@ export default function UpdateWindow() {
   const [error, setError] = useState<string | null>(null);
   const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
 
+  const formatError = (err: unknown) => {
+    if (err instanceof Error) {
+      return `${err.name}: ${err.message}${err.stack ? `\n${err.stack}` : ""}`;
+    }
+    if (typeof err === "string") {
+      return err;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  };
+
+  const logToFile = (message: string, err?: unknown) => {
+    const payload = err ? `${message} | detail: ${formatError(err)}` : message;
+    invoke("append_app_log", { message: payload }).catch((e) => {
+      console.error("写入日志失败：", e);
+    });
+  };
+
   useEffect(() => {
     const current = getCurrentWindow();
-    current.center().then();
-    current.show().then();
+    current.center().catch((err) => {
+      logToFile("更新窗口居中失败", err);
+    });
+    current.show().catch((err) => {
+      logToFile("更新窗口显示失败", err);
+    });
     current.setIgnoreCursorEvents(false).catch((err) => {
-      console.warn("无法启用更新窗口的鼠标事件：", err);
+      const msg = "无法启用更新窗口的鼠标事件";
+      console.warn(`${msg}：`, err);
+      logToFile(msg, err);
     });
 
     let isMounted = true;
     const run = async () => {
       try {
+        logToFile("开始检查更新");
         const update = await check();
         if (!isMounted) return;
 
         if (!update) {
           setStatus("no-update");
+          logToFile("当前已是最新版本");
           return;
         }
 
         setUpdateInfo(update);
+        logToFile(
+          `发现新版本 ${update.version}，当前版本 ${update.currentVersion}`,
+        );
         setStatus("prompt");
       } catch (err) {
         console.error("更新检查失败：", err);
         if (!isMounted) return;
-        setError("检查更新失败，请稍后重试。");
+        const message = "检查更新失败，请稍后重试。";
+        setError(message);
+        logToFile(message, err);
         setStatus("error");
       }
     };
 
-    run().then();
+    run().catch((err) => logToFile("检查更新任务执行失败", err));
 
     return () => {
       isMounted = false;
@@ -70,6 +105,7 @@ export default function UpdateWindow() {
     setStatus("downloading");
     setProgress(0);
     setError(null);
+    logToFile(`开始下载更新包 ${updateInfo.version}`);
 
     let downloaded = 0;
     let total = 0;
@@ -79,6 +115,9 @@ export default function UpdateWindow() {
         switch (event.event) {
           case "Started":
             total = event.data.contentLength ?? 0;
+            logToFile(
+              `更新包下载开始，大小 ${total > 0 ? `${total} bytes` : "未知"}`,
+            );
             break;
           case "Progress":
             downloaded += event.data.chunkLength;
@@ -89,28 +128,39 @@ export default function UpdateWindow() {
           case "Finished":
             setProgress(1);
             setStatus("finished");
+            logToFile("更新包下载完成");
             break;
           default:
             break;
         }
       });
       setTimeout(async () => {
-        await relaunch();
+        logToFile("更新安装完成，准备重启应用");
+        try {
+          await relaunch();
+        } catch (relaunchError) {
+          logToFile("应用重启失败", relaunchError);
+        }
       }, 1200);
     } catch (err) {
       console.error("更新下载失败：", err);
+      const message = "下载更新失败，请重试。";
       setStatus("error");
-      setError("下载更新失败，请重试。");
+      setError(message);
+      logToFile(message, err);
     }
   };
 
   const handleLater = async () => {
     try {
-      await ignoreMouseEvents();
+      logToFile("用户选择稍后提醒");
+      await ignoreMouseEvents("main");
       const win = getCurrentWindow();
       await win.close();
+      logToFile("更新窗口已关闭");
     } catch (err) {
       console.error("关闭更新窗口失败：", err);
+      logToFile("关闭更新窗口失败", err);
     }
   };
 
@@ -130,7 +180,7 @@ export default function UpdateWindow() {
             <h2 className={"found-version"}>
               发现新版本 {updateInfo?.version}
             </h2>
-            <p>当前版本：{updateInfo?.currentVersion}</p>
+            <p>InterView Code 当前版本：{updateInfo?.currentVersion}</p>
             {updateBody && (
               <div
                 className="release-note"
@@ -229,6 +279,7 @@ export default function UpdateWindow() {
               #0f172a;
             font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
             color: #f8fafc;
+            border-radius: 15px;
           }
           .update-wrapper {
             position: relative;

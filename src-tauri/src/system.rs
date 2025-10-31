@@ -1,5 +1,4 @@
 ﻿use crate::config::open_language_selector;
-use crate::utils::toggle_webview_devtools;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Manager, Position, Wry};
@@ -19,14 +18,6 @@ pub fn show_window(window: tauri::Window) -> Result<(), String> {
         .show()
         .map_err(|e| format!("Failed to show window: {}", e))?;
 
-    //     #[cfg(target_os = "macos")]
-    //     apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None)
-    //         .expect("Unsupported platform! 'apply_vibrancy' is only supported on macOS");
-    //
-    //     #[cfg(target_os = "windows")]
-    //     apply_acrylic(&window, None)
-    //         .expect("Unsupported platform! 'apply_blur' is only supported on Windows");
-
     Ok(())
 }
 
@@ -38,10 +29,6 @@ pub fn create_shortcut(app: &mut App<Wry>) {
     let hide_or_show_shortcut =
         Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::Backquote);
 
-    #[cfg(target_os = "windows")]
-    let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::F12);
-    #[cfg(target_os = "macos")]
-    let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::META), Code::F12);
 
     let open_language_window = Shortcut::new(Some(Modifiers::ALT), Code::Digit3);
 
@@ -75,9 +62,7 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                                 }
                             }
                         }
-                    } else if shortcut == &toggle_dev_tools_shortcut {
-                        toggle_webview_devtools(_app)
-                    } else if shortcut == &open_language_window {
+                    }  else if shortcut == &open_language_window {
                         open_language_selector(_app)
                     } else if shortcut == &quit_shortcut {
                         graceful_exit(_app)
@@ -90,9 +75,7 @@ pub fn create_shortcut(app: &mut App<Wry>) {
     app.global_shortcut()
         .register(hide_or_show_shortcut)
         .unwrap();
-    app.global_shortcut()
-        .register(toggle_dev_tools_shortcut)
-        .unwrap();
+
     app.global_shortcut()
         .register(open_language_window)
         .unwrap();

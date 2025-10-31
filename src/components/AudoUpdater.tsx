@@ -6,9 +6,6 @@ import { ignoreMouseEvents, startMouseEvents } from "@/lib/system.ts";
 const UPDATE_WINDOW_LABEL = "updater";
 
 export async function openUpdateWindow() {
-  startMouseEvents().catch((err) => {
-    console.error("start mouse", err as string);
-  });
   if (typeof WebviewWindow.getByLabel === "function") {
     try {
       const existing = await WebviewWindow.getByLabel(UPDATE_WINDOW_LABEL);
@@ -22,21 +19,28 @@ export async function openUpdateWindow() {
 
   const updater = new WebviewWindow(UPDATE_WINDOW_LABEL, {
     title: "应用更新",
-    url: "/#/update", // 👈 React Router 的路径
+    url: "/#/update", // hash router path
     width: 480,
     height: 320,
-    resizable: true,
+    resizable: false,
     center: true,
     decorations: false,
-    alwaysOnTop: false,
+    alwaysOnTop: true,
     transparent: false,
     focus: true,
     visible: false,
+    devtools: true,
   });
 
-  await updater.once("tauri://created", () => {
+  await updater.once("tauri://created", async () => {
     console.log("更新窗口已创建");
-    updater.setFocus().catch(() => {});
+    try {
+      await startMouseEvents(UPDATE_WINDOW_LABEL);
+    } catch (error) {
+      console.warn("无法开启更新窗口的鼠标事件：", error);
+    }
+    await updater.show().catch(() => {});
+    await updater.setFocus().catch(() => {});
   });
 
   await updater.once("tauri://error", (e) => {
@@ -54,6 +58,7 @@ export default function AutoUpdater() {
       try {
         const current = WebviewWindow.getCurrent();
         if (current.label !== "main") {
+          await startMouseEvents(current.label);
           return;
         }
 
@@ -75,7 +80,7 @@ export default function AutoUpdater() {
             console.error("打开更新窗口失败：", err);
           })
           .finally(async () => {
-            await ignoreMouseEvents();
+            await ignoreMouseEvents("main");
           });
       } catch (err) {
         console.error("检查更新失败：", err);

@@ -55,7 +55,7 @@ function App() {
       return;
     }
     hasRegistered.current = true;
-    ignoreMouseEvents().catch((err) => {
+    ignoreMouseEvents("main").catch((err) => {
       console.error("mouse err", err);
     });
     registryGlobalShortcut().catch((err) => {
