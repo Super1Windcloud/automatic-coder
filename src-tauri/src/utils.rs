@@ -5,7 +5,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
-
+use tauri::{AppHandle, Manager};
 
 pub fn get_env_key(key_name: &str) -> String {
     env::var(key_name).unwrap_or_else(|_| {
@@ -30,6 +30,15 @@ pub fn get_env_key(key_name: &str) -> String {
             result.vlm_key.to_string()
         }
     })
+}
+
+pub fn toggle_webview_devtools(app: &AppHandle) {
+    let window = app.get_webview_window("main").unwrap();
+    if !window.is_devtools_open() {
+        window.open_devtools();
+    } else {
+        window.close_devtools();
+    }
 }
 
 pub fn is_dev() -> bool {
