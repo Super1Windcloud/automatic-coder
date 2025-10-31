@@ -10,6 +10,7 @@ import {
   LogicalSize,
 } from "@tauri-apps/api/window";
 import { useAppStateStoreWithNoHook } from "@/store";
+import { checkCurrentAppUpdate } from "@/services/update.ts";
 
 let windowX = 0;
 let windowY = 0;
@@ -92,6 +93,11 @@ export async function registryGlobalShortcut() {
       }
 
       await moveWindow("left");
+    }
+  });
+  await register("CommandOrControl+F11", async (event) => {
+    if (event.state === "Released") {
+      await checkCurrentAppUpdate();
     }
   });
 

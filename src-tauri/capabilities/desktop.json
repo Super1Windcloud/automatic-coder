@@ -6,7 +6,8 @@
     "linux"
   ],
   "windows": [
-    "main"
+    "main",
+    "updater"
   ],
   "permissions": [
     "global-shortcut:allow-is-registered",
@@ -18,6 +19,24 @@
     "core:window:allow-set-position",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-    "core:window:allow-inner-size"
+    "core:window:allow-inner-size",
+    "updater:default",
+    "core:window:allow-get-all-windows",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-close",
+    "opener:allow-open-url",
+    "core:window:allow-show",
+    "core:window:allow-center",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://tauri.app"
+        },
+        {
+          "url": "https://github.com/Super1WindCloud"
+        }
+      ]
+    }
   ]
 }

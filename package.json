@@ -3,7 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "author": {
-    "name": "superwindcloud"
+    "name": "superwindcloud",
+    "email": "ss1178933440@gmail.com"
   },
   "type": "module",
   "scripts": {
@@ -12,13 +13,14 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "td": "tauri dev",
-    "tb": "tauri build",
+    "tb": "tauri build &&  npx rimraf  bundle &&  mv src-tauri/target/release/bundle   ./bundle",
     "icon": "tauri icon  app-icon.png",
     "prepare": "husky",
     "lint": "eslint  src --fix && cd src-tauri && cargo check",
     "format": "prettier --write src && cd src-tauri &&  cargo fmt",
     "build:select": "vite build --config vite.select.config.ts",
-    "custom": "pnpm build && pnpm build:select"
+    "custom": "pnpm build && pnpm build:select",
+    "sign": "pnpm tauri signer generate -w ~/.tauri/interview_code.key"
   },
   "dependencies": {
     "@lexical/markdown": "^0.36.2",
@@ -32,6 +34,8 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-global-shortcut": "~2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "~2.9.0",
     "@uiw/react-markdown-preview": "^5.1.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

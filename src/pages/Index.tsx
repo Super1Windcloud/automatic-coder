@@ -53,6 +53,7 @@ const Index = ({
 
   useEffect(() => {
     if (!startShowSolution && unlistenFn) {
+      console.warn("unlisten current callback");
       unlistenFn();
       setUnlistenFn(null);
     }

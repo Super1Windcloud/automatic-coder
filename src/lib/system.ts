@@ -29,6 +29,9 @@ export async function ignoreMouseEvents() {
   await getCurrentWindow().setIgnoreCursorEvents(true);
 }
 
+export async function startMouseEvents() {
+  await getCurrentWindow().setIgnoreCursorEvents(false);
+}
 async function getWebViewHeight() {
   return document.documentElement.scrollHeight;
 }
