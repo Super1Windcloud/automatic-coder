@@ -9,7 +9,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "taze": "npx taze  -w",
+    "taze": "npx taze latest  -w",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -18,7 +18,7 @@
     "icon": "tauri icon  app-icon.png",
     "prepare": "husky",
     "lint": "eslint  src --fix && cd src-tauri && cargo check",
-    "clean" : "cd src-tauri && cargo clean && cargo update",
+    "clean": "cd src-tauri && cargo clean && cargo update",
     "format": "prettier --write src && cd src-tauri &&  cargo fmt",
     "build:select": "vite build --config vite.select.config.ts",
     "custom": "pnpm build && pnpm build:select && pnpm build:activation",
@@ -60,7 +60,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@tauri-apps/cli": "^2.9.3",
-    "@types/node": "^22.19.0",
+    "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
