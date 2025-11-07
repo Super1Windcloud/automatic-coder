@@ -1,26 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
 // 非Web环境使用HashRouter 而不是 BrowserRouter
-import { HashRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import { ignoreMouseEvents } from "@/lib/system.ts";
-import { registryGlobalShortcut } from "@/lib/shortcut.ts";
-import { useAsync } from "react-use";
-import AutoUpdater from "@/components/AudoUpdater.tsx";
-import UpdateWindow from "@/pages/UpdateWindow.tsx";
+import { HashRouter, Route, Routes } from 'react-router-dom'
+import AutoUpdater from '@/components/AudoUpdater.tsx'
+import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { registryGlobalShortcut } from '@/lib/shortcut.ts'
+import { ignoreMouseEvents } from '@/lib/system.ts'
+import UpdateWindow from '@/pages/UpdateWindow.tsx'
+import Index from './pages/Index'
+import NotFound from './pages/NotFound'
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient()
 
 const MainApp = ({
   hasSolution,
   setHasSolution,
 }: {
-  hasSolution: boolean;
-  setHasSolution: (value: boolean) => void;
+  hasSolution: boolean
+  setHasSolution: (value: boolean) => void
 }) => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -43,31 +41,27 @@ const MainApp = ({
       </HashRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+)
 
 function App() {
-  const [hasSolution, setHasSolution] = useState(false);
+  const [hasSolution, setHasSolution] = useState(false)
 
-  const hasRegistered = useRef(false); // 使用 useRef 来确保只注册一次
+  const hasRegistered = useRef(false) // 使用 useRef 来确保只注册一次
 
   useEffect(() => {
     if (hasRegistered.current) {
-      return;
+      return
     }
-    hasRegistered.current = true;
-    ignoreMouseEvents("main").catch((err) => {
-      console.error("mouse err", err);
-    });
+    hasRegistered.current = true
+    ignoreMouseEvents('main').catch((err) => {
+      console.error('mouse err', err)
+    })
     registryGlobalShortcut().catch((err) => {
-      console.error("shortcut err", err);
-    });
-  }, []);
+      console.error('shortcut err', err)
+    })
+  }, [])
 
-  useAsync(async () => {
-    await invoke("show_window");
-  }, []);
-
-  return <MainApp hasSolution={hasSolution} setHasSolution={setHasSolution} />;
+  return <MainApp hasSolution={hasSolution} setHasSolution={setHasSolution} />
 }
 
-export default App;
+export default App

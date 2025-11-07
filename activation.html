@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>激活授权</title>
+    <link rel="icon" href="data:,">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top, #1f2937, #111827 70%);
+            color: #f3f4f6;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card {
+            width: min(520px, 90vw);
+            background: rgba(17, 24, 39, 0.9);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.6);
+            padding: 32px 28px;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: 22px;
+            text-align: center;
+        }
+
+        p.description {
+            margin: 0 0 24px;
+            text-align: center;
+            font-size: 14px;
+            color: rgba(226, 232, 240, 0.8);
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 160px;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            background: rgba(15, 23, 42, 0.85);
+            color: #e2e8f0;
+            font-size: 14px;
+            padding: 14px;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        textarea:focus {
+            border-color: rgba(59, 130, 246, 0.6);
+            box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+        }
+
+        button.submit {
+            width: 100%;
+            margin-top: 16px;
+            padding: 12px 0;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #06b6d4, #2563eb);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+
+        button.submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        button.submit:not(:disabled):hover {
+            transform: translateY(-1px);
+        }
+
+        .status {
+            margin-top: 18px;
+            font-size: 13px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(30, 64, 175, 0.15);
+            color: #bfdbfe;
+            display: none;
+            white-space: pre-line;
+        }
+
+        .status.error {
+            background: rgba(220, 38, 38, 0.18);
+            color: #fecaca;
+        }
+
+        .status.success {
+            background: rgba(16, 185, 129, 0.18);
+            color: #bbf7d0;
+        }
+    </style>
+</head>
+<body>
+<main class="card">
+    <h1>输入激活码</h1>
+    <p class="description">请粘贴收到的加密激活码，完成验证后即可开始使用。</p>
+    <form id="activation-form">
+        <textarea
+                id="activation-code"
+                placeholder="粘贴加密激活码"
+                autocomplete="off"
+                spellcheck="false"
+        ></textarea>
+        <button class="submit" type="submit">立即激活</button>
+        <div id="activation-status" class="status"></div>
+    </form>
+</main>
+<script type="module" src="/src/activation.ts"></script>
+</body>
+</html>

@@ -2,9 +2,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     },
     "composite": true,
     "skipLibCheck": true,
@@ -13,7 +11,5 @@
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true
   },
-  "include": [
-    "vite.config.ts"
-  ]
+  "include": ["vite.config.ts"]
 }

@@ -1,14 +1,7 @@
 {
   "identifier": "desktop-capability",
-  "platforms": [
-    "macOS",
-    "windows",
-    "linux"
-  ],
-  "windows": [
-    "main",
-    "updater"
-  ],
+  "platforms": ["macOS", "windows", "linux"],
+  "windows": ["main", "updater"],
   "permissions": [
     "global-shortcut:allow-is-registered",
     "global-shortcut:allow-register",
@@ -23,7 +16,10 @@
     "updater:default",
     "core:window:allow-get-all-windows",
     "core:webview:allow-create-webview-window",
-    "core:webview:allow-internal-toggle-devtools",
+    {
+      "identifier": "core:webview:allow-internal-toggle-devtools",
+      "windows": ["main", "updater", "activation_gate"]
+    },
     "core:window:allow-close",
     "opener:allow-open-url",
     "core:window:allow-show",

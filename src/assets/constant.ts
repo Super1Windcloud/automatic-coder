@@ -1,4 +1,4 @@
-import { CodeLanguage } from "@/store";
+import { CodeLanguage } from '@/store'
 
 export const defaultMarkdown = `# 欢迎使用 Markdown 编辑器
 
@@ -57,10 +57,10 @@ greet("World");
 ---
 
 开始编辑左侧的内容，右侧将实时显示渲染效果！
-`;
+`
 
 export const getLLMPrompts = (language: CodeLanguage) =>
-  `你是一名参加秋招笔试的程序员,图中可能有选择题和算法题,如果是选择题请直接给出答案和简要解析,如果是算法题请使用${language}完成图中的算法题,给出代码和解题思路`;
+  `你是一名参加秋招笔试的程序员,图中可能有选择题和算法题,如果是选择题请直接给出答案和简要解析,如果是算法题请使用${language}完成图中的算法题,给出代码和解题思路`
 
 export const templatePattern =
-  /^你是一名参加秋招笔试的程序员,图中可能有选择题和算法题,如果是选择题请直接给出答案和简要解析,如果是算法题请使用(.+?)完成图中的算法题,给出代码和解题思路$/;
+  /^你是一名参加秋招笔试的程序员,图中可能有选择题和算法题,如果是选择题请直接给出答案和简要解析,如果是算法题请使用(.+?)完成图中的算法题,给出代码和解题思路$/

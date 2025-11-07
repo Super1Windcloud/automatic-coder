@@ -1,25 +1,25 @@
-import { useEffect, useRef } from "react";
-import { check } from "@tauri-apps/plugin-updater";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { ignoreMouseEvents, startMouseEvents } from "@/lib/system.ts";
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { check } from '@tauri-apps/plugin-updater'
+import { useEffect, useRef } from 'react'
+import { ignoreMouseEvents, startMouseEvents } from '@/lib/system.ts'
 
-const UPDATE_WINDOW_LABEL = "updater";
+const UPDATE_WINDOW_LABEL = 'updater'
 
 export async function openUpdateWindow() {
-  if (typeof WebviewWindow.getByLabel === "function") {
+  if (typeof WebviewWindow.getByLabel === 'function') {
     try {
-      const existing = await WebviewWindow.getByLabel(UPDATE_WINDOW_LABEL);
+      const existing = await WebviewWindow.getByLabel(UPDATE_WINDOW_LABEL)
       if (existing) {
-        await existing.close();
+        await existing.close()
       }
     } catch (error) {
-      console.warn("关闭旧的更新窗口失败：", error);
+      console.warn('关闭旧的更新窗口失败：', error)
     }
   }
 
   const updater = new WebviewWindow(UPDATE_WINDOW_LABEL, {
-    title: "应用更新",
-    url: "/#/update", // hash router path
+    title: '应用更新',
+    url: '/#/update', // hash router path
     width: 480,
     height: 320,
     resizable: false,
@@ -30,64 +30,64 @@ export async function openUpdateWindow() {
     focus: true,
     visible: false,
     devtools: true,
-  });
+  })
 
-  await updater.once("tauri://created", async () => {
-    console.log("更新窗口已创建");
+  await updater.once('tauri://created', async () => {
+    console.log('更新窗口已创建')
     try {
-      await startMouseEvents(UPDATE_WINDOW_LABEL);
+      await startMouseEvents(UPDATE_WINDOW_LABEL)
     } catch (error) {
-      console.warn("无法开启更新窗口的鼠标事件：", error);
+      console.warn('无法开启更新窗口的鼠标事件：', error)
     }
-    await updater.show().catch(() => {});
-    await updater.setFocus().catch(() => {});
-  });
+    await updater.show().catch(() => {})
+    await updater.setFocus().catch(() => {})
+  })
 
-  await updater.once("tauri://error", (e) => {
-    console.error("更新窗口创建失败：", e);
-  });
+  await updater.once('tauri://error', (e) => {
+    console.error('更新窗口创建失败：', e)
+  })
 
-  return updater;
+  return updater
 }
 
 export default function AutoUpdater() {
-  const hasCheckedRef = useRef(false);
+  const hasCheckedRef = useRef(false)
 
   useEffect(() => {
     const doCheck = async () => {
       try {
-        const current = WebviewWindow.getCurrent();
-        if (current.label !== "main") {
-          await startMouseEvents(current.label);
-          return;
+        const current = WebviewWindow.getCurrent()
+        if (current.label !== 'main') {
+          await startMouseEvents(current.label)
+          return
         }
 
         if (hasCheckedRef.current) {
-          return;
+          return
         }
-        hasCheckedRef.current = true;
+        hasCheckedRef.current = true
 
-        const update = await check();
+        const update = await check()
 
         if (!update) {
-          console.log("✅ 当前已是最新版本");
-          return;
+          console.log('✅ 当前已是最新版本')
+          return
         }
 
-        console.log(`发现新版本 ${update.version}`);
+        console.log(`发现新版本 ${update.version}`)
         openUpdateWindow()
           .catch((err) => {
-            console.error("打开更新窗口失败：", err);
+            console.error('打开更新窗口失败：', err)
           })
           .finally(async () => {
-            await ignoreMouseEvents("main");
-          });
+            await ignoreMouseEvents('main')
+          })
       } catch (err) {
-        console.error("检查更新失败：", err);
+        console.error('检查更新失败：', err)
       }
-    };
-    doCheck();
-  }, []);
+    }
+    doCheck()
+  }, [])
 
-  return null;
+  return null
 }

@@ -1,4 +1,4 @@
-import MarkdownPreviewBase from "@uiw/react-markdown-preview";
+import MarkdownPreviewBase from '@uiw/react-markdown-preview'
 
 export function MarkdownPreview({ content }: { content: string }) {
   return (
@@ -6,9 +6,9 @@ export function MarkdownPreview({ content }: { content: string }) {
       source={content}
       style={{
         padding: 16,
-        backgroundColor: "transparent",
-        scrollbarWidth: "none",
+        backgroundColor: 'transparent',
+        scrollbarWidth: 'none',
       }}
     />
-  );
+  )
 }

@@ -1,78 +1,79 @@
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import {
   getCurrentWindow,
   LogicalPosition,
   LogicalSize,
-} from "@tauri-apps/api/window";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { useAppStateStoreWithNoHook } from "@/store";
-let lastHeight = 0;
+} from '@tauri-apps/api/window'
+import { useAppStateStoreWithNoHook } from '@/store'
+
+let lastHeight = 0
 
 export async function resetWindow(offsetCallback: () => void) {
-  await getCurrentWindow().setSize(new LogicalSize(800, 50));
-  await getCurrentWindow().setPosition(new LogicalPosition(100, 50));
-  offsetCallback();
-  useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath("");
-  useAppStateStoreWithNoHook.getState().updateStartShowSolution(false);
+  await getCurrentWindow().setSize(new LogicalSize(800, 50))
+  await getCurrentWindow().setPosition(new LogicalPosition(100, 50))
+  offsetCallback()
+  useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath('')
+  useAppStateStoreWithNoHook.getState().updateStartShowSolution(false)
 }
 
 export async function showSolutionWindow() {
-  const contentHeight = await getWebViewHeight();
-  const window = getCurrentWindow();
+  const contentHeight = await getWebViewHeight()
+  const window = getCurrentWindow()
 
-  if (Math.abs(contentHeight - lastHeight) < 10) return; // 🔥 忽略微小变化
-  lastHeight = contentHeight;
+  if (Math.abs(contentHeight - lastHeight) < 10) return // 🔥 忽略微小变化
+  lastHeight = contentHeight
 
-  await window.setSize(new LogicalSize(800, contentHeight));
+  await window.setSize(new LogicalSize(800, contentHeight))
 }
 
 async function resolveWindow(label?: string) {
   if (!label) {
-    return getCurrentWindow();
+    return getCurrentWindow()
   }
   try {
-    const win = await WebviewWindow.getByLabel(label);
+    const win = await WebviewWindow.getByLabel(label)
     if (win) {
-      return win;
+      return win
     }
   } catch (error) {
-    console.warn(`查找窗口 ${label} 失败：`, error);
+    console.warn(`查找窗口 ${label} 失败：`, error)
   }
-  return null;
+  return null
 }
 
 export async function ignoreMouseEvents(label?: string) {
-  const win = await resolveWindow(label);
-  if (!win) return;
-  await win.setIgnoreCursorEvents(true);
+  const win = await resolveWindow(label)
+  if (!win) return
+  await win.setIgnoreCursorEvents(true)
 }
 
 export async function startMouseEvents(label?: string) {
-  const win = await resolveWindow(label);
-  if (!win) return;
-  await win.setIgnoreCursorEvents(false);
+  const win = await resolveWindow(label)
+  if (!win) return
+  await win.setIgnoreCursorEvents(false)
 }
 async function getWebViewHeight() {
-  return document.documentElement.scrollHeight;
+  return document.documentElement.scrollHeight
 }
 
 export async function enableMouseEventsForComponent(id: string) {
-  const element = document.getElementById(id);
+  const element = document.getElementById(id)
   if (element) {
-    element.style.pointerEvents = "auto"; // 启用该组件的鼠标事件
+    element.style.pointerEvents = 'auto' // 启用该组件的鼠标事件
   }
 }
 
 export async function getScreenCaptureToLocalPath() {
-  const filePath = (await invoke("get_screen_capture_to_path")) as string;
-  console.log(filePath);
-  const imagePath = convertFileSrc(filePath.replace("\\", "/"));
-  useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(imagePath);
+  const filePath = (await invoke('get_screen_capture_to_path')) as string
+  console.log(filePath)
+  const imagePath = convertFileSrc(filePath.replace('\\', '/'))
+  useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(imagePath)
 }
 
 export async function getScreenCaptureToBlobUrl() {
-  const bytes = await invoke<number[]>("get_screen_capture_to_bytes");
-  const blob = new Blob([new Uint8Array(bytes)], { type: "image/png" });
-  const url = URL.createObjectURL(blob);
-  useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(url);
+  const bytes = await invoke<number[]>('get_screen_capture_to_bytes')
+  const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' })
+  const url = URL.createObjectURL(blob)
+  useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(url)
 }

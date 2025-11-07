@@ -1,183 +1,183 @@
-import { useEffect, useMemo, useState } from "react";
-import { check, DownloadEvent, Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ignoreMouseEvents } from "@/lib/system.ts";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { openUrl } from '@tauri-apps/plugin-opener'
+import { relaunch } from '@tauri-apps/plugin-process'
+import { check, DownloadEvent, Update } from '@tauri-apps/plugin-updater'
+import { useEffect, useMemo, useState } from 'react'
+import { ignoreMouseEvents } from '@/lib/system.ts'
 
 type UpdateStatus =
-  | "checking"
-  | "prompt"
-  | "downloading"
-  | "finished"
-  | "no-update"
-  | "error";
+  | 'checking'
+  | 'prompt'
+  | 'downloading'
+  | 'finished'
+  | 'no-update'
+  | 'error'
 
 export default function UpdateWindow() {
-  const [status, setStatus] = useState<UpdateStatus>("checking");
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [updateInfo, setUpdateInfo] = useState<Update | null>(null);
+  const [status, setStatus] = useState<UpdateStatus>('checking')
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<Update | null>(null)
 
   const formatError = (err: unknown) => {
     if (err instanceof Error) {
-      return `${err.name}: ${err.message}${err.stack ? `\n${err.stack}` : ""}`;
+      return `${err.name}: ${err.message}${err.stack ? `\n${err.stack}` : ''}`
     }
-    if (typeof err === "string") {
-      return err;
+    if (typeof err === 'string') {
+      return err
     }
     try {
-      return JSON.stringify(err);
+      return JSON.stringify(err)
     } catch {
-      return String(err);
+      return String(err)
     }
-  };
+  }
 
   const logToFile = (message: string, err?: unknown) => {
-    const payload = err ? `${message} | detail: ${formatError(err)}` : message;
-    invoke("append_app_log", { message: payload }).catch((e) => {
-      console.error("写入日志失败：", e);
-    });
-  };
+    const payload = err ? `${message} | detail: ${formatError(err)}` : message
+    invoke('append_app_log', { message: payload }).catch((e) => {
+      console.error('写入日志失败：', e)
+    })
+  }
 
   useEffect(() => {
-    const current = getCurrentWindow();
+    const current = getCurrentWindow()
     current.center().catch((err) => {
-      logToFile("更新窗口居中失败", err);
-    });
+      logToFile('更新窗口居中失败', err)
+    })
     current.show().catch((err) => {
-      logToFile("更新窗口显示失败", err);
-    });
+      logToFile('更新窗口显示失败', err)
+    })
     current.setIgnoreCursorEvents(false).catch((err) => {
-      const msg = "无法启用更新窗口的鼠标事件";
-      console.warn(`${msg}：`, err);
-      logToFile(msg, err);
-    });
+      const msg = '无法启用更新窗口的鼠标事件'
+      console.warn(`${msg}：`, err)
+      logToFile(msg, err)
+    })
 
-    let isMounted = true;
+    let isMounted = true
     const run = async () => {
       try {
-        logToFile("开始检查更新");
-        const update = await check();
-        if (!isMounted) return;
+        logToFile('开始检查更新')
+        const update = await check()
+        if (!isMounted) return
 
         if (!update) {
-          setStatus("no-update");
-          logToFile("当前已是最新版本");
-          return;
+          setStatus('no-update')
+          logToFile('当前已是最新版本')
+          return
         }
 
-        setUpdateInfo(update);
+        setUpdateInfo(update)
         logToFile(
           `发现新版本 ${update.version}，当前版本 ${update.currentVersion}`,
-        );
-        setStatus("prompt");
+        )
+        setStatus('prompt')
       } catch (err) {
-        console.error("更新检查失败：", err);
-        if (!isMounted) return;
-        const message = "检查更新失败，请稍后重试。";
-        setError(message);
-        logToFile(message, err);
-        setStatus("error");
+        console.error('更新检查失败：', err)
+        if (!isMounted) return
+        const message = '检查更新失败，请稍后重试。'
+        setError(message)
+        logToFile(message, err)
+        setStatus('error')
       }
-    };
+    }
 
-    run().catch((err) => logToFile("检查更新任务执行失败", err));
+    run().catch((err) => logToFile('检查更新任务执行失败', err))
 
     return () => {
-      isMounted = false;
-    };
-  }, []);
+      isMounted = false
+    }
+  }, [])
 
   const updateBody = useMemo(() => {
-    if (!updateInfo?.rawJson) return "";
+    if (!updateInfo?.rawJson) return ''
     const releaseNotes =
-      typeof updateInfo.rawJson === "object" && updateInfo.rawJson
+      typeof updateInfo.rawJson === 'object' && updateInfo.rawJson
         ? (updateInfo.rawJson as Record<string, unknown>).body
-        : "";
-    return typeof releaseNotes === "string" ? releaseNotes : "";
-  }, [updateInfo]);
+        : ''
+    return typeof releaseNotes === 'string' ? releaseNotes : ''
+  }, [updateInfo])
 
   const startDownload = async () => {
-    if (!updateInfo) return;
+    if (!updateInfo) return
 
-    setStatus("downloading");
-    setProgress(0);
-    setError(null);
-    logToFile(`开始下载更新包 ${updateInfo.version}`);
+    setStatus('downloading')
+    setProgress(0)
+    setError(null)
+    logToFile(`开始下载更新包 ${updateInfo.version}`)
 
-    let downloaded = 0;
-    let total = 0;
+    let downloaded = 0
+    let total = 0
 
     try {
       await updateInfo.downloadAndInstall((event: DownloadEvent) => {
         switch (event.event) {
-          case "Started":
-            total = event.data.contentLength ?? 0;
+          case 'Started':
+            total = event.data.contentLength ?? 0
             logToFile(
-              `更新包下载开始，大小 ${total > 0 ? `${total} bytes` : "未知"}`,
-            );
-            break;
-          case "Progress":
-            downloaded += event.data.chunkLength;
+              `更新包下载开始，大小 ${total > 0 ? `${total} bytes` : '未知'}`,
+            )
+            break
+          case 'Progress':
+            downloaded += event.data.chunkLength
             if (total > 0) {
-              setProgress(downloaded / total);
+              setProgress(downloaded / total)
             }
-            break;
-          case "Finished":
-            setProgress(1);
-            setStatus("finished");
-            logToFile("更新包下载完成");
-            break;
+            break
+          case 'Finished':
+            setProgress(1)
+            setStatus('finished')
+            logToFile('更新包下载完成')
+            break
           default:
-            break;
+            break
         }
-      });
+      })
       setTimeout(async () => {
-        logToFile("更新安装完成，准备重启应用");
+        logToFile('更新安装完成，准备重启应用')
         try {
-          await relaunch();
+          await relaunch()
         } catch (relaunchError) {
-          logToFile("应用重启失败", relaunchError);
+          logToFile('应用重启失败', relaunchError)
         }
-      }, 1200);
+      }, 1200)
     } catch (err) {
-      console.error("更新下载失败：", err);
-      const message = "下载更新失败，请重试。";
-      setStatus("error");
-      setError(message);
-      logToFile(message, err);
+      console.error('更新下载失败：', err)
+      const message = '下载更新失败，请重试。'
+      setStatus('error')
+      setError(message)
+      logToFile(message, err)
     }
-  };
+  }
 
   const handleLater = async () => {
     try {
-      logToFile("用户选择稍后提醒");
-      await ignoreMouseEvents("main");
-      const win = getCurrentWindow();
-      await win.close();
-      logToFile("更新窗口已关闭");
+      logToFile('用户选择稍后提醒')
+      await ignoreMouseEvents('main')
+      const win = getCurrentWindow()
+      await win.close()
+      logToFile('更新窗口已关闭')
     } catch (err) {
-      console.error("关闭更新窗口失败：", err);
-      logToFile("关闭更新窗口失败", err);
+      console.error('关闭更新窗口失败：', err)
+      logToFile('关闭更新窗口失败', err)
     }
-  };
+  }
 
   const renderContent = () => {
     switch (status) {
-      case "checking":
+      case 'checking':
         return (
           <>
             <div className="pulse-dot" />
             <h2>正在为你查找新版本...</h2>
             <p>请稍候，这只需要几秒钟。</p>
           </>
-        );
-      case "prompt":
+        )
+      case 'prompt':
         return (
           <>
-            <h2 className={"found-version"}>
+            <h2 className={'found-version'}>
               发现新版本 {updateInfo?.version}
             </h2>
             <p>InterView Code 当前版本：{updateInfo?.currentVersion}</p>
@@ -197,15 +197,15 @@ export default function UpdateWindow() {
             </div>
             <h3
               onClick={async () => {
-                await openUrl("https://github.com/Super1WindCloud");
+                await openUrl('https://github.com/Super1WindCloud')
               }}
-              className={"author"}
+              className={'author'}
             >
               SuperWindCloud
             </h3>
           </>
-        );
-      case "downloading":
+        )
+      case 'downloading':
         return (
           <>
             <div className="spinner" />
@@ -223,15 +223,15 @@ export default function UpdateWindow() {
               <span>{Math.min(progress * 100, 100).toFixed(1)}%</span>
             </div>
           </>
-        );
-      case "finished":
+        )
+      case 'finished':
         return (
           <>
             <h2>✨ 完成！</h2>
             <p>新版本已就绪，应用即将自动重启。</p>
           </>
-        );
-      case "no-update":
+        )
+      case 'no-update':
         return (
           <>
             <h2>暂无更新</h2>
@@ -240,8 +240,8 @@ export default function UpdateWindow() {
               关闭
             </button>
           </>
-        );
-      case "error":
+        )
+      case 'error':
         return (
           <>
             <h2>更新遇到问题</h2>
@@ -259,11 +259,11 @@ export default function UpdateWindow() {
               </button>
             </div>
           </>
-        );
+        )
       default:
-        return null;
+        return null
     }
-  };
+  }
 
   return (
     <div className="update-wrapper">
@@ -461,5 +461,5 @@ export default function UpdateWindow() {
         `}
       </style>
     </div>
-  );
+  )
 }
