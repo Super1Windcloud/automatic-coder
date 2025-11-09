@@ -77,7 +77,9 @@ async function handleSubmit(event: Event) {
     if (payload.success && payload.activated) {
       updateStatus('激活成功，正在启动应用…', 'success')
       setTimeout(() => {
-        closeAndLaunch().catch((err) => logError('failed to close activation window', err))
+        closeAndLaunch().catch((err) =>
+          logError('failed to close activation window', err),
+        )
       }, 300)
       return
     }

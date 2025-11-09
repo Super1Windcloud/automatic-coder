@@ -1,8 +1,8 @@
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { check } from '@tauri-apps/plugin-updater'
 import { useEffect, useRef } from 'react'
-import { ignoreMouseEvents, startMouseEvents } from '@/lib/system.ts'
 import { logError, logInfo, logWarn } from '@/lib/logger.ts'
+import { ignoreMouseEvents, startMouseEvents } from '@/lib/system.ts'
 
 const UPDATE_WINDOW_LABEL = 'updater'
 

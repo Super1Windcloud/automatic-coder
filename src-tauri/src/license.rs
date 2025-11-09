@@ -1,19 +1,24 @@
-use dotenv::dotenv;
+use dirs::home_dir;
+use dotenv::{dotenv, from_filename};
 use license_manager::{ActivationRepository, LicenseError, VerificationResult};
+use reqwest::{multipart, Client};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::fmt::{self, Write};
+use std::io::Write as IoWrite;
 use std::path::{Path, PathBuf};
-use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use std::{env, fs};
-use tauri::{AppHandle, Manager, Position, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri::{
+    AppHandle, Emitter, Manager, Position, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
+use tempfile::NamedTempFile;
 
 use crate::utils::{is_dev, write_some_log};
-
-const ACTIVATION_STORAGE_FILE: &str = "activation_codes.enc";
-const ACTIVATION_ASSET_CANDIDATES: [&str; 1] = ["assets/activation_codes.enc"];
-const ACTIVATION_MISSING_MESSAGE: &str = "校验密码不存在";
+const REMOTE_ACTIVATION_FILE: &str = "activation_codes.enc";
+const ACTIVATION_STATUS_FILE: &str = "activation_status_fingerprint";
 
 pub struct LicenseState {
     inner: Mutex<Option<LicenseInner>>,
@@ -30,12 +35,14 @@ impl Default for LicenseState {
 }
 
 struct LicenseInner {
-    repository: ActivationRepository,
-    status_path: PathBuf,
+    activation_key: String,
+    remote: RemoteActivationConfig,
+    status_roots: Vec<PathBuf>,
     activated: bool,
+    client: Client,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ActivationStatus {
     pub activated: bool,
 }
@@ -43,15 +50,22 @@ pub struct ActivationStatus {
 impl LicenseState {
     pub fn initialize(
         &self,
-        repository: ActivationRepository,
-        status_path: PathBuf,
+        bootstrap: ActivationBootstrap,
+        status_roots: Vec<PathBuf>,
         activated: bool,
     ) {
         let mut guard = self.inner.lock().unwrap();
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .user_agent("InterviewCoder/activation-refresh")
+            .build()
+            .expect("failed to construct activation HTTP client");
         *guard = Some(LicenseInner {
-            repository,
-            status_path,
+            activation_key: bootstrap.activation_key,
+            remote: bootstrap.remote,
+            status_roots,
             activated,
+            client,
         });
         self.enabled.store(true, Ordering::SeqCst);
     }
@@ -77,26 +91,41 @@ impl LicenseState {
         Ok(inner.activated)
     }
 
-    pub fn verify_and_consume(
+    pub async fn verify_and_consume(
         &self,
         encrypted_code: &str,
-    ) -> Result<VerificationResult, LicenseError> {
-        let mut guard = self.inner.lock().unwrap();
-        let Some(inner) = guard.as_mut() else {
-            return Err(LicenseError::Io(
-                "license system has not been initialised".to_string(),
-            ));
+    ) -> Result<VerificationResult, ActivationFlowError> {
+        let (status_roots, activation_key, remote, client) = {
+            let mut guard = self.inner.lock().unwrap();
+            let Some(inner) = guard.as_mut() else {
+                return Err(ActivationFlowError::Disabled(
+                    "license system has not been initialised".into(),
+                ));
+            };
+            if inner.activated {
+                return Ok(VerificationResult::Success);
+            }
+            (
+                inner.status_roots.clone(),
+                inner.activation_key.clone(),
+                inner.remote.clone(),
+                inner.client.clone(),
+            )
         };
-        if inner.activated {
-            return Ok(VerificationResult::Success);
+
+        let locker = RemoteActivationLock::acquire(remote, client).await?;
+        let repository = ActivationRepository::new(locker.path(), &activation_key)?;
+        let verification = repository.verify_and_consume(encrypted_code)?;
+
+        if matches!(verification, VerificationResult::Success) {
+            locker.finalize_success().await?;
+            persist_status(&status_roots, encrypted_code)?;
+            if let Some(inner) = self.inner.lock().unwrap().as_mut() {
+                inner.activated = true;
+            }
         }
 
-        let result = inner.repository.verify_and_consume(encrypted_code)?;
-        if matches!(result, VerificationResult::Success) {
-            inner.activated = true;
-            persist_status(&inner.status_path, inner.activated)?;
-        }
-        Ok(result)
+        Ok(verification)
     }
 }
 
@@ -106,72 +135,18 @@ pub struct ActivationAttemptPayload {
     pub status: String,
     pub activated: bool,
 }
+#[derive(Clone)]
+pub struct ActivationBootstrap {
+    activation_key: String,
+    remote: RemoteActivationConfig,
+}
 
-fn copy_activation_asset_to(
-    app_handle: &AppHandle,
-    storage_path: &Path,
-) -> Result<(), LicenseError> {
-    let resolver = app_handle.path();
-    let mut copied = false;
-
-    for candidate in ACTIVATION_ASSET_CANDIDATES {
-        if let Some(asset) = app_handle.asset_resolver().get(candidate.to_string()) {
-            fs::write(storage_path, asset.bytes)?;
-            write_some_log(&format!(
-                "activation asset {candidate} copied via resolver to {}",
-                storage_path.display()
-            ));
-            copied = true;
-            break;
-        }
-
-        if let Ok(resource_dir) = resolver.resource_dir() {
-            let candidate_path = resource_dir.join(candidate);
-            if candidate_path.exists() {
-                fs::copy(&candidate_path, storage_path)?;
-                fs::remove_file(&candidate_path)?;
-                write_some_log(&format!(
-                    "activation asset {candidate} copied from resource_dir ({}) to {}",
-                    candidate_path.display(),
-                    storage_path.display()
-                ));
-                copied = true;
-                break;
-            }
-        }
-
-        let dev_candidate = env::current_dir()
-            .map(|cwd| cwd.join("src-tauri").join("assets").join(candidate))
-            .ok();
-        if let Some(dev_path) = dev_candidate {
-            if dev_path.exists() {
-                fs::copy(&dev_path, storage_path)?;
-                write_some_log(&format!(
-                    "activation asset {candidate} copied from dev assets ({}) to {}",
-                    dev_path.display(),
-                    storage_path.display()
-                ));
-                copied = true;
-                break;
-            }
-        }
-    }
-
-    if !copied {
-        let message = ACTIVATION_MISSING_MESSAGE.to_string();
-        println!("{message}");
-        write_some_log(&message);
-        app_handle
-            .dialog()
-            .message(message)
-            .title("激活失败")
-            .kind(MessageDialogKind::Error)
-            .buttons(MessageDialogButtons::Ok)
-            .blocking_show();
-        process::exit(1);
-    }
-
-    Ok(())
+#[derive(Clone)]
+struct RemoteActivationConfig {
+    owner: String,
+    repo: String,
+    tag: String,
+    token: String,
 }
 
 #[tauri::command]
@@ -186,9 +161,9 @@ pub fn get_activation_status(state: State<LicenseState>) -> Result<bool, String>
 }
 
 #[tauri::command]
-pub fn submit_activation_code(
+pub async fn submit_activation_code(
     app: AppHandle,
-    state: State<LicenseState>,
+    state: State<'_, LicenseState>,
     encrypted_code: String,
 ) -> Result<ActivationAttemptPayload, String> {
     if encrypted_code.trim().is_empty() {
@@ -213,7 +188,7 @@ pub fn submit_activation_code(
         });
     }
 
-    match state.verify_and_consume(encrypted_code.trim()) {
+    match state.verify_and_consume(encrypted_code.trim()).await {
         Ok(VerificationResult::Success) => {
             if let Some(window) = app.get_webview_window("activation_gate") {
                 let _ = window.hide();
@@ -222,6 +197,7 @@ pub fn submit_activation_code(
             if let Some(main) = app.get_webview_window("main") {
                 reveal_main_window(main);
             }
+            let _ = app.emit("activation_granted", true);
             Ok(ActivationAttemptPayload {
                 success: true,
                 status: "success".into(),
@@ -243,9 +219,9 @@ pub fn submit_activation_code(
 }
 
 pub fn prepare_activation_repository(
-    app_handle: &AppHandle,
-) -> Result<Option<ActivationRepository>, LicenseError> {
-    dotenv().unwrap();
+    _app_handle: &AppHandle,
+) -> Result<Option<ActivationBootstrap>, LicenseError> {
+    hydrate_activation_env();
     let Some(key) = env::var("ACTIVATION_MASTER_KEY").ok() else {
         println!("activation system disabled: missing ACTIVATION_MASTER_KEY");
         return Ok(None);
@@ -256,68 +232,38 @@ pub fn prepare_activation_repository(
         return Ok(None);
     }
 
-    let resolver = app_handle.path();
-    let data_dir = resolver.app_data_dir().map_err(|err| {
-        LicenseError::Io(format!("unable to determine app data directory: {err}"))
-    })?;
+    let owner = env::var("ACTIVATION_REMOTE_OWNER")
+        .or_else(|_| env::var("GITEE_OWNER"))
+        .unwrap_or_else(|_| "SuperWindcloud".to_string());
+    let repo = env::var("ACTIVATION_REMOTE_REPO")
+        .or_else(|_| env::var("GITEE_REPO"))
+        .unwrap_or_else(|_| "rust_default_arg".to_string());
+    let tag = env::var("ACTIVATION_REMOTE_TAG")
+        .or_else(|_| env::var("GITEE_RELEASE_TAG"))
+        .unwrap_or_else(|_| "0.1.0".to_string());
+    let token = env::var("ACTIVATION_REMOTE_TOKEN")
+        .or_else(|_| env::var("GITEE_TOKEN"))
+        .unwrap_or_else(|_| "ca4ea3ee8f000c59976334bd5455eda3".to_string());
 
-    if !data_dir.exists() {
-        fs::create_dir_all(&data_dir)?;
+    if token.trim().is_empty() {
+        println!("activation system disabled: missing GITEE_TOKEN/ACTIVATION_REMOTE_TOKEN");
+        return Ok(None);
     }
 
-    let storage_path = data_dir.join(ACTIVATION_STORAGE_FILE);
-    if !storage_path.exists() {
-        copy_activation_asset_to(app_handle, &storage_path)?;
-    }
+    Ok(Some(ActivationBootstrap {
+        activation_key: key,
+        remote: RemoteActivationConfig {
+            owner,
+            repo,
+            tag,
+            token,
+        },
+    }))
+}
 
-    if !storage_path.exists() {
-        let message = format!("激活存储文件缺失: {}", storage_path.display());
-        println!("{message}");
-        write_some_log(&message);
-        app_handle
-            .dialog()
-            .message(ACTIVATION_MISSING_MESSAGE)
-            .title("激活失败")
-            .kind(MessageDialogKind::Error)
-            .buttons(MessageDialogButtons::Ok)
-            .blocking_show();
-        process::exit(1);
-    }
-
-    write_some_log(&format!(
-        "activation storage resolved at {}",
-        storage_path.display()
-    ));
-
-    let mut repository = ActivationRepository::new(&storage_path, &key)?;
-
-    if let Err(err) = repository.load() {
-        match err {
-            LicenseError::Io(msg) | LicenseError::Serde(msg) => {
-                let repair_log = format!(
-                    "activation storage corrupted ({msg}); attempting restore from packaged asset"
-                );
-                println!("{repair_log}");
-                write_some_log(&repair_log);
-
-                if storage_path.exists() {
-                    fs::remove_file(&storage_path)?;
-                }
-
-                copy_activation_asset_to(app_handle, &storage_path)?;
-                repository = ActivationRepository::new(&storage_path, &key)?;
-                repository.load().map_err(|inner| {
-                    let failure = format!("activation storage restore failed: {inner}");
-                    println!("{failure}");
-                    write_some_log(&failure);
-                    inner
-                })?;
-            }
-            other => return Err(other),
-        }
-    }
-
-    Ok(Some(repository))
+fn hydrate_activation_env() {
+    let _ = from_filename("src-tauri/.env");
+    let _ = dotenv();
 }
 
 pub fn open_activation_window(app_handle: &AppHandle) {
@@ -364,20 +310,350 @@ pub fn show_main_window_now(app_handle: &AppHandle) {
     }
 }
 
-pub fn load_activation_status(status_path: &Path) -> ActivationStatus {
-    if !status_path.exists() {
-        return ActivationStatus::default();
+pub fn load_activation_status(roots: &[PathBuf]) -> ActivationStatus {
+    if !roots.is_empty() && roots.iter().all(|root| find_status_file(root).is_some()) {
+        return ActivationStatus { activated: true };
+    }
+    ActivationStatus::default()
+}
+
+pub fn persist_status(roots: &[PathBuf], activation_code: &str) -> Result<(), LicenseError> {
+    let fingerprint = derive_activation_fingerprint(activation_code);
+    for root in roots {
+        let target_dir = root.join(&fingerprint);
+        if !target_dir.exists() {
+            fs::create_dir_all(&target_dir)?;
+        }
+        let path = target_dir.join(ACTIVATION_STATUS_FILE);
+        fs::write(path, &fingerprint)?;
+    }
+    Ok(())
+}
+
+fn derive_activation_fingerprint(activation_code: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(activation_code.trim().as_bytes());
+    hasher.update(collect_machine_signature().as_bytes());
+    let digest = hasher.finalize();
+    let mut output = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        write!(&mut output, "{:02x}", byte).expect("writing to String cannot fail");
+    }
+    output
+}
+
+fn collect_machine_signature() -> String {
+    let mut parts = Vec::new();
+
+    let hostname = whoami::fallible::hostname().unwrap();
+    if !hostname.is_empty() {
+        parts.push(hostname);
     }
 
-    match fs::read_to_string(status_path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-        Err(_) => ActivationStatus::default(),
+    let username = whoami::username();
+    if !username.is_empty() {
+        parts.push(username);
+    }
+
+    let platform = whoami::platform().to_string();
+    if !platform.is_empty() {
+        parts.push(platform);
+    }
+
+    let arch = whoami::arch().to_string();
+    if !arch.is_empty() {
+        parts.push(arch);
+    }
+
+    let distro = whoami::distro();
+    if !distro.is_empty() {
+        parts.push(distro);
+    }
+
+    if let Some(home) = home_dir() {
+        if !home.as_os_str().is_empty() {
+            parts.push(home.display().to_string());
+        }
+    }
+
+    if let Ok(machine) = env::var("COMPUTERNAME").or_else(|_| env::var("HOSTNAME")) {
+        if !machine.is_empty() {
+            parts.push(machine);
+        }
+    }
+
+    if let Ok(identifier) = env::var("PROCESSOR_IDENTIFIER") {
+        if !identifier.is_empty() {
+            parts.push(identifier);
+        }
+    }
+
+    parts.join("|")
+}
+
+fn find_status_file(root: &Path) -> Option<PathBuf> {
+    if !root.exists() {
+        return None;
+    }
+    let entries = fs::read_dir(root).ok()?;
+    for entry in entries.flatten() {
+        if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.len() != 64 || !name_str.chars().all(|c| c.is_ascii_hexdigit()) {
+            continue;
+        }
+        let candidate = entry.path().join(ACTIVATION_STATUS_FILE);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+#[derive(Debug)]
+pub enum ActivationFlowError {
+    Disabled(String),
+    License(LicenseError),
+    Remote(String),
+}
+
+impl fmt::Display for ActivationFlowError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ActivationFlowError::Disabled(msg) => write!(f, "{msg}"),
+            ActivationFlowError::License(err) => write!(f, "{err}"),
+            ActivationFlowError::Remote(msg) => write!(f, "{msg}"),
+        }
     }
 }
 
-pub fn persist_status(path: &Path, activated: bool) -> Result<(), LicenseError> {
-    let status = ActivationStatus { activated };
-    let content = serde_json::to_string_pretty(&status)?;
-    fs::write(path, content)?;
+impl From<LicenseError> for ActivationFlowError {
+    fn from(value: LicenseError) -> Self {
+        ActivationFlowError::License(value)
+    }
+}
+
+impl From<reqwest::Error> for ActivationFlowError {
+    fn from(value: reqwest::Error) -> Self {
+        ActivationFlowError::Remote(value.to_string())
+    }
+}
+
+impl From<std::io::Error> for ActivationFlowError {
+    fn from(value: std::io::Error) -> Self {
+        ActivationFlowError::Remote(value.to_string())
+    }
+}
+
+const GITEE_API_BASE: &str = "https://gitee.com/api/v5";
+
+struct RemoteActivationLock {
+    config: RemoteActivationConfig,
+    client: Client,
+    release_id: u64,
+    asset_id: u64,
+    file_name: String,
+    file: NamedTempFile,
+}
+
+impl RemoteActivationLock {
+    async fn acquire(
+        config: RemoteActivationConfig,
+        client: Client,
+    ) -> Result<Self, ActivationFlowError> {
+        write_some_log("acquiring remote activation payload");
+        let release = fetch_release_by_tag(&client, &config).await?;
+        let asset = fetch_activation_asset(&client, &config, release.id).await?;
+        let payload = download_activation_payload(&client, &config, release.id, asset.id).await?;
+        let mut file = NamedTempFile::new()?;
+        file.write_all(&payload)?;
+        Ok(Self {
+            config,
+            client,
+            release_id: release.id,
+            asset_id: asset.id,
+            file_name: asset.name,
+            file,
+        })
+    }
+
+    fn path(&self) -> &Path {
+        self.file.path()
+    }
+
+    async fn finalize_success(self) -> Result<(), ActivationFlowError> {
+        write_some_log("refreshing remote activation payload");
+        let RemoteActivationLock {
+            config,
+            client,
+            release_id,
+            asset_id,
+            file_name,
+            file,
+        } = self;
+
+        delete_activation_asset(&client, &config, release_id, asset_id).await?;
+        let path = file.path().to_path_buf();
+        upload_activation_payload(&client, &config, release_id, &file_name, &path).await
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct GiteeRelease {
+    id: u64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct GiteeAttachFile {
+    id: u64,
+    name: String,
+}
+
+async fn fetch_release_by_tag(
+    client: &Client,
+    config: &RemoteActivationConfig,
+) -> Result<GiteeRelease, ActivationFlowError> {
+    let url = format!(
+        "{GITEE_API_BASE}/repos/{}/{}/releases/tags/{}",
+        config.owner, config.repo, config.tag
+    );
+    let response = client
+        .get(url)
+        .query(&[("access_token", config.token.as_str())])
+        .header("Accept", "application/json")
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(ActivationFlowError::Remote(format!(
+            "failed to fetch release ({status}): {body}"
+        )));
+    }
+    response.json::<GiteeRelease>().await.map_err(Into::into)
+}
+
+async fn fetch_activation_asset(
+    client: &Client,
+    config: &RemoteActivationConfig,
+    release_id: u64,
+) -> Result<GiteeAttachFile, ActivationFlowError> {
+    let url = format!(
+        "{GITEE_API_BASE}/repos/{}/{}/releases/{release_id}/attach_files",
+        config.owner, config.repo
+    );
+    let response = client
+        .get(url)
+        .query(&[("access_token", config.token.as_str())])
+        .header("Accept", "application/json")
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(ActivationFlowError::Remote(format!(
+            "failed to list release attachments ({status}): {body}"
+        )));
+    }
+    let files = response.json::<Vec<GiteeAttachFile>>().await?;
+    if files.is_empty() {
+        return Err(ActivationFlowError::Remote(
+            "no activation payload available on remote release".into(),
+        ));
+    }
+
+    if let Some(found) = files
+        .iter()
+        .find(|file| file.name == REMOTE_ACTIVATION_FILE)
+        .cloned()
+    {
+        return Ok(found);
+    }
+
+    Ok(files[0].clone())
+}
+
+async fn download_activation_payload(
+    client: &Client,
+    config: &RemoteActivationConfig,
+    release_id: u64,
+    asset_id: u64,
+) -> Result<Vec<u8>, ActivationFlowError> {
+    let url = format!(
+        "{GITEE_API_BASE}/repos/{}/{}/releases/{release_id}/attach_files/{asset_id}/download",
+        config.owner, config.repo
+    );
+    let response = client
+        .get(url)
+        .query(&[("access_token", config.token.as_str())])
+        .header("Accept", "application/octet-stream")
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(ActivationFlowError::Remote(format!(
+            "failed to download activation payload ({status}): {body}"
+        )));
+    }
+    Ok(response.bytes().await?.to_vec())
+}
+
+async fn delete_activation_asset(
+    client: &Client,
+    config: &RemoteActivationConfig,
+    release_id: u64,
+    asset_id: u64,
+) -> Result<(), ActivationFlowError> {
+    let url = format!(
+        "{GITEE_API_BASE}/repos/{}/{}/releases/{release_id}/attach_files/{asset_id}",
+        config.owner, config.repo
+    );
+    let response = client
+        .delete(url)
+        .query(&[("access_token", config.token.as_str())])
+        .header("Accept", "application/json")
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(ActivationFlowError::Remote(format!(
+            "failed to delete activation payload ({status}): {body}"
+        )));
+    }
+    Ok(())
+}
+
+async fn upload_activation_payload(
+    client: &Client,
+    config: &RemoteActivationConfig,
+    release_id: u64,
+    file_name: &str,
+    path: &Path,
+) -> Result<(), ActivationFlowError> {
+    let url = format!(
+        "{GITEE_API_BASE}/repos/{}/{}/releases/{release_id}/attach_files",
+        config.owner, config.repo
+    );
+    let bytes = fs::read(path)?;
+    let part = multipart::Part::bytes(bytes).file_name(file_name.to_string());
+    let form = multipart::Form::new().part("file", part);
+    let response = client
+        .post(url)
+        .query(&[("access_token", config.token.as_str())])
+        .multipart(form)
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(ActivationFlowError::Remote(format!(
+            "failed to upload activation payload ({status}): {body}"
+        )));
+    }
     Ok(())
 }

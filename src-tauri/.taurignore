@@ -3,3 +3,6 @@ logs/
 dist/
 assets/
 asset/
+activation_codes_client.txt
+app.log
+*.txt

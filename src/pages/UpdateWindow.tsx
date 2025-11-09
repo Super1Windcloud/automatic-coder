@@ -3,8 +3,8 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, DownloadEvent, Update } from '@tauri-apps/plugin-updater'
 import { useEffect, useMemo, useState } from 'react'
-import { ignoreMouseEvents } from '@/lib/system.ts'
 import { logError, logInfo, logWarn } from '@/lib/logger.ts'
+import { ignoreMouseEvents } from '@/lib/system.ts'
 
 type UpdateStatus =
   | 'checking'

@@ -18,7 +18,7 @@ pub fn get_env_key(key_name: &str) -> String {
                 write_some_log(&format!("环境变量 {} 未设置，请设置后重试", key_name))
             };
             // open_language_selector(app.handle());
-            "".to_string()
+            "sk-pakzoefbduyiqonsznhvnyczilfcjwefjolbvjslcliafefk".to_string()
         } else {
             #[cfg(target_os = "macos")]
             if !is_dev() {

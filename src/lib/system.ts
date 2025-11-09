@@ -5,8 +5,8 @@ import {
   LogicalPosition,
   LogicalSize,
 } from '@tauri-apps/api/window'
-import { useAppStateStoreWithNoHook } from '@/store'
 import { logError } from '@/lib/logger.ts'
+import { useAppStateStoreWithNoHook } from '@/store'
 
 let lastHeight = 0
 

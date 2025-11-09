@@ -14,16 +14,18 @@ use crate::{
 };
 use capture::*;
 use config::*;
-use dotenv::dotenv;
+use dotenv::{dotenv, from_filename};
 use license::load_activation_status;
+use std::{fs, path::PathBuf};
 use system::*;
+use tauri::{App, Manager, Wry};
 #[allow(unused_imports)]
 use utils::*;
 use vlm::*;
-use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    from_filename("src-tauri/.env").ok();
     dotenv().ok();
 
     tauri::Builder::default()
@@ -50,42 +52,69 @@ pub fn run() {
             create_tray_icon(app);
             create_shortcut(app);
             load_preferences(app);
-            match app.path().app_data_dir() {
-                Ok(status_dir) => {
-                    let status_path = status_dir.join("activation_status.json");
-                    let status = load_activation_status(&status_path);
-                    let state: tauri::State<LicenseState> = app.state();
-                    match prepare_activation_repository(app.handle()) {
-                        Ok(Some(repository)) => {
-                            let needs_activation = !status.activated;
-                            state.initialize(repository, status_path.clone(), status.activated);
-                            if needs_activation {
-                                open_activation_window(app.handle());
-                            } else {
-                                show_main_window_now(app.handle());
-                            }
-                        }
-                        Ok(None) => {
-                            state.disable();
-                            println!("activation repository unavailable; continuing without activation gate");
-                            show_main_window_now(app.handle());
-                        }
-                        Err(err) => {
-                            state.disable();
-                            println!("activation repository initialisation failed: {err}");
-                            show_main_window_now(app.handle());
-                        }
-                    }
-                }
-                Err(err) => {
-                    let state: tauri::State<LicenseState> = app.state();
-                    state.disable();
-                    println!("failed to determine data directory; activation disabled ({err})");
-                    show_main_window_now(app.handle());
-                }
-            }
+            check_activation_status(app);
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn check_activation_status(app: &mut App<Wry>) {
+    match collect_status_roots(app) {
+        Ok(status_roots) => {
+            let status = load_activation_status(&status_roots);
+            let state: tauri::State<LicenseState> = app.state();
+            match prepare_activation_repository(app.handle()) {
+                Ok(Some(bootstrap)) => {
+                    let needs_activation = !status.activated;
+                    state.initialize(bootstrap, status_roots.clone(), status.activated);
+                    if needs_activation {
+                        open_activation_window(app.handle());
+                    } else {
+                        show_main_window_now(app.handle());
+                    }
+                }
+                Ok(None) => {
+                    state.disable();
+                    println!(
+                        "activation repository unavailable; continuing without activation gate"
+                    );
+                    show_main_window_now(app.handle());
+                }
+                Err(err) => {
+                    state.disable();
+                    println!("activation repository initialisation failed: {err}");
+                    show_main_window_now(app.handle());
+                }
+            }
+        }
+        Err(err) => {
+            let state: tauri::State<LicenseState> = app.state();
+            state.disable();
+            println!("{err}");
+            show_main_window_now(app.handle());
+        }
+    }
+}
+
+fn collect_status_roots(app: &App<Wry>) -> Result<Vec<PathBuf>, String> {
+    let resolver = app.path();
+    let mut roots = Vec::with_capacity(3);
+    let targets = [
+        ("documents", resolver.document_dir()),
+        ("local", resolver.app_local_data_dir()),
+        ("roaming", resolver.app_data_dir()),
+    ];
+
+    for (label, dir_result) in targets {
+        let dir = dir_result
+            .map_err(|err| format!("failed to resolve {label} directory: {err}"))?;
+        if !dir.exists() {
+            fs::create_dir_all(&dir)
+                .map_err(|err| format!("failed to prepare {label} directory: {err}"))?;
+        }
+        roots.push(dir);
+    }
+
+    Ok(roots)
 }

@@ -48,8 +48,7 @@
     "macOS": {
       "entitlements": "entitlements.plist"
     },
-    "createUpdaterArtifacts": true,
-    "resources": ["assets/activation_codes.enc"]
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "updater": {

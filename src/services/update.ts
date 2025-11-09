@@ -1,7 +1,7 @@
 import { check } from '@tauri-apps/plugin-updater'
 import { openUpdateWindow } from '@/components/AudoUpdater.tsx'
-import { ignoreMouseEvents, startMouseEvents } from '@/lib/system.ts'
 import { logError, logInfo } from '@/lib/logger.ts'
+import { ignoreMouseEvents, startMouseEvents } from '@/lib/system.ts'
 
 export async function checkCurrentAppUpdate() {
   try {

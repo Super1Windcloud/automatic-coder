@@ -6,6 +6,7 @@ use serde_json::json;
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager};
 
+#[allow(dead_code)]
 async fn request_chat_completion(prompt: String, image_url: String) -> String {
     let messages = json!([
         {
@@ -76,6 +77,7 @@ async fn request_chat_completion(prompt: String, image_url: String) -> String {
     text
 }
 
+#[allow(dead_code)]
 async fn request_chat_completion_stream_thinking(prompt: String, image_url: String) -> String {
     let start_time = std::time::Instant::now();
     let messages = json!([
