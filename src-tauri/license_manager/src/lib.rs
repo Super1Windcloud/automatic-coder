@@ -8,7 +8,8 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_ENGINE, Engine as _};
-use rand::{distributions::Alphanumeric, Rng};
+use rand::distr::Alphanumeric;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -185,7 +186,10 @@ impl ActivationRepository {
         Ok(())
     }
 
-    pub fn verify_and_consume(&self, encrypted_code: &str) -> Result<VerificationResult, LicenseError> {
+    pub fn verify_and_consume(
+        &self,
+        encrypted_code: &str,
+    ) -> Result<VerificationResult, LicenseError> {
         let decrypted = self.manager.decrypt_code(encrypted_code)?;
         let mut book = self.load()?;
         if !book.contains(&decrypted) {
@@ -201,7 +205,7 @@ impl ActivationRepository {
 
 pub fn generate_unique_codes(count: usize, length: usize) -> Vec<String> {
     let mut codes = HashSet::with_capacity(count);
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     while codes.len() < count {
         let candidate: String = (0..length)
             .map(|_| rng.sample(Alphanumeric) as char)
@@ -260,10 +264,8 @@ fn decode_key_material(input: &str) -> Result<[u8; 32], LicenseError> {
         return Err(LicenseError::InvalidKeyLength);
     }
 
-    let looks_like_hex = trimmed.len() % 2 == 0
-        && trimmed
-            .chars()
-            .all(|c| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'));
+    let looks_like_hex =
+        trimmed.len().is_multiple_of(2) && trimmed.chars().all(|c| c.is_ascii_hexdigit());
 
     if looks_like_hex {
         if let Ok(bytes) = hex::decode(trimmed) {

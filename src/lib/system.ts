@@ -6,6 +6,7 @@ import {
   LogicalSize,
 } from '@tauri-apps/api/window'
 import { useAppStateStoreWithNoHook } from '@/store'
+import { logError } from '@/lib/logger.ts'
 
 let lastHeight = 0
 
@@ -37,7 +38,7 @@ async function resolveWindow(label?: string) {
       return win
     }
   } catch (error) {
-    console.warn(`查找窗口 ${label} 失败：`, error)
+    logError(`查找窗口 ${label ?? 'unknown'} 失败`, error)
   }
   return null
 }

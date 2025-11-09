@@ -1,10 +1,10 @@
-import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, DownloadEvent, Update } from '@tauri-apps/plugin-updater'
 import { useEffect, useMemo, useState } from 'react'
 import { ignoreMouseEvents } from '@/lib/system.ts'
+import { logError, logInfo, logWarn } from '@/lib/logger.ts'
 
 type UpdateStatus =
   | 'checking'
@@ -20,70 +20,46 @@ export default function UpdateWindow() {
   const [error, setError] = useState<string | null>(null)
   const [updateInfo, setUpdateInfo] = useState<Update | null>(null)
 
-  const formatError = (err: unknown) => {
-    if (err instanceof Error) {
-      return `${err.name}: ${err.message}${err.stack ? `\n${err.stack}` : ''}`
-    }
-    if (typeof err === 'string') {
-      return err
-    }
-    try {
-      return JSON.stringify(err)
-    } catch {
-      return String(err)
-    }
-  }
-
-  const logToFile = (message: string, err?: unknown) => {
-    const payload = err ? `${message} | detail: ${formatError(err)}` : message
-    invoke('append_app_log', { message: payload }).catch((e) => {
-      console.error('写入日志失败：', e)
-    })
-  }
-
   useEffect(() => {
     const current = getCurrentWindow()
     current.center().catch((err) => {
-      logToFile('更新窗口居中失败', err)
+      logError('更新窗口居中失败', err)
     })
     current.show().catch((err) => {
-      logToFile('更新窗口显示失败', err)
+      logError('更新窗口显示失败', err)
     })
     current.setIgnoreCursorEvents(false).catch((err) => {
-      const msg = '无法启用更新窗口的鼠标事件'
-      console.warn(`${msg}：`, err)
-      logToFile(msg, err)
+      logWarn('无法启用更新窗口的鼠标事件', err)
     })
 
     let isMounted = true
     const run = async () => {
       try {
-        logToFile('开始检查更新')
+        logInfo('开始检查更新')
         const update = await check()
         if (!isMounted) return
 
         if (!update) {
           setStatus('no-update')
-          logToFile('当前已是最新版本')
+          logInfo('当前已是最新版本')
           return
         }
 
         setUpdateInfo(update)
-        logToFile(
+        logInfo(
           `发现新版本 ${update.version}，当前版本 ${update.currentVersion}`,
         )
         setStatus('prompt')
       } catch (err) {
-        console.error('更新检查失败：', err)
         if (!isMounted) return
         const message = '检查更新失败，请稍后重试。'
         setError(message)
-        logToFile(message, err)
+        logError(message, err)
         setStatus('error')
       }
     }
 
-    run().catch((err) => logToFile('检查更新任务执行失败', err))
+    run().catch((err) => logError('检查更新任务执行失败', err))
 
     return () => {
       isMounted = false
@@ -105,7 +81,7 @@ export default function UpdateWindow() {
     setStatus('downloading')
     setProgress(0)
     setError(null)
-    logToFile(`开始下载更新包 ${updateInfo.version}`)
+    logInfo(`开始下载更新包 ${updateInfo.version}`)
 
     let downloaded = 0
     let total = 0
@@ -115,7 +91,7 @@ export default function UpdateWindow() {
         switch (event.event) {
           case 'Started':
             total = event.data.contentLength ?? 0
-            logToFile(
+            logInfo(
               `更新包下载开始，大小 ${total > 0 ? `${total} bytes` : '未知'}`,
             )
             break
@@ -128,39 +104,37 @@ export default function UpdateWindow() {
           case 'Finished':
             setProgress(1)
             setStatus('finished')
-            logToFile('更新包下载完成')
+            logInfo('更新包下载完成')
             break
           default:
             break
         }
       })
       setTimeout(async () => {
-        logToFile('更新安装完成，准备重启应用')
+        logInfo('更新安装完成，准备重启应用')
         try {
           await relaunch()
         } catch (relaunchError) {
-          logToFile('应用重启失败', relaunchError)
+          logError('应用重启失败', relaunchError)
         }
       }, 1200)
     } catch (err) {
-      console.error('更新下载失败：', err)
       const message = '下载更新失败，请重试。'
       setStatus('error')
       setError(message)
-      logToFile(message, err)
+      logError(message, err)
     }
   }
 
   const handleLater = async () => {
     try {
-      logToFile('用户选择稍后提醒')
+      logInfo('用户选择稍后提醒')
       await ignoreMouseEvents('main')
       const win = getCurrentWindow()
       await win.close()
-      logToFile('更新窗口已关闭')
+      logInfo('更新窗口已关闭')
     } catch (err) {
-      console.error('关闭更新窗口失败：', err)
-      logToFile('关闭更新窗口失败', err)
+      logError('关闭更新窗口失败', err)
     }
   }
 

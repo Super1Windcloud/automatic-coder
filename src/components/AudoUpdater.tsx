@@ -2,6 +2,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { check } from '@tauri-apps/plugin-updater'
 import { useEffect, useRef } from 'react'
 import { ignoreMouseEvents, startMouseEvents } from '@/lib/system.ts'
+import { logError, logInfo, logWarn } from '@/lib/logger.ts'
 
 const UPDATE_WINDOW_LABEL = 'updater'
 
@@ -13,7 +14,7 @@ export async function openUpdateWindow() {
         await existing.close()
       }
     } catch (error) {
-      console.warn('关闭旧的更新窗口失败：', error)
+      logWarn('关闭旧的更新窗口失败', error)
     }
   }
 
@@ -33,18 +34,22 @@ export async function openUpdateWindow() {
   })
 
   await updater.once('tauri://created', async () => {
-    console.log('更新窗口已创建')
+    logInfo('更新窗口已创建')
     try {
       await startMouseEvents(UPDATE_WINDOW_LABEL)
     } catch (error) {
-      console.warn('无法开启更新窗口的鼠标事件：', error)
+      logWarn('无法开启更新窗口的鼠标事件', error)
     }
-    await updater.show().catch(() => {})
-    await updater.setFocus().catch(() => {})
+    await updater.show().catch((err) => {
+      logError('更新窗口显示失败', err)
+    })
+    await updater.setFocus().catch((err) => {
+      logError('更新窗口获取焦点失败', err)
+    })
   })
 
   await updater.once('tauri://error', (e) => {
-    console.error('更新窗口创建失败：', e)
+    logError('更新窗口创建失败', e)
   })
 
   return updater
@@ -70,20 +75,20 @@ export default function AutoUpdater() {
         const update = await check()
 
         if (!update) {
-          console.log('✅ 当前已是最新版本')
+          logInfo('✅ 当前已是最新版本')
           return
         }
 
-        console.log(`发现新版本 ${update.version}`)
+        logInfo(`发现新版本 ${update.version}`)
         openUpdateWindow()
           .catch((err) => {
-            console.error('打开更新窗口失败：', err)
+            logError('打开更新窗口失败', err)
           })
           .finally(async () => {
             await ignoreMouseEvents('main')
           })
       } catch (err) {
-        console.error('检查更新失败：', err)
+        logError('检查更新失败', err)
       }
     }
     doCheck()

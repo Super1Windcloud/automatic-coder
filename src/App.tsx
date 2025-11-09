@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { registryGlobalShortcut } from '@/lib/shortcut.ts'
 import { ignoreMouseEvents } from '@/lib/system.ts'
+import { logError } from '@/lib/logger.ts'
 import UpdateWindow from '@/pages/UpdateWindow.tsx'
 import Index from './pages/Index'
 import NotFound from './pages/NotFound'
@@ -54,10 +55,10 @@ function App() {
     }
     hasRegistered.current = true
     ignoreMouseEvents('main').catch((err) => {
-      console.error('mouse err', err)
+      logError('mouse err', err)
     })
     registryGlobalShortcut().catch((err) => {
-      console.error('shortcut err', err)
+      logError('shortcut err', err)
     })
   }, [])
 

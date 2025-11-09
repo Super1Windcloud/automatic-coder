@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { logError } from '@/lib/logger.ts'
 
 type ActivationAttemptPayload = {
   success: boolean
@@ -36,7 +37,7 @@ async function closeAndLaunch() {
   try {
     await getCurrentWebviewWindow().close()
   } catch (err) {
-    console.error('failed to close activation window', err)
+    logError('failed to close activation window', err)
   }
 }
 
@@ -47,7 +48,7 @@ async function ensureState() {
       await closeAndLaunch()
     }
   } catch (err) {
-    console.error('failed to query activation status', err)
+    logError('failed to query activation status', err)
     updateStatus('无法验证激活状态，请重试或联系支持。', 'error')
   }
 }
@@ -76,7 +77,7 @@ async function handleSubmit(event: Event) {
     if (payload.success && payload.activated) {
       updateStatus('激活成功，正在启动应用…', 'success')
       setTimeout(() => {
-        closeAndLaunch().catch(console.error)
+        closeAndLaunch().catch((err) => logError('failed to close activation window', err))
       }, 300)
       return
     }
@@ -94,7 +95,9 @@ async function handleSubmit(event: Event) {
       case 'disabled':
         updateStatus('当前版本未启用激活校验。', 'info')
         setTimeout(() => {
-          closeAndLaunch().catch(console.error)
+          closeAndLaunch().catch((err) =>
+            logError('failed to close activation window', err),
+          )
         }, 200)
         break
       default:
@@ -102,7 +105,7 @@ async function handleSubmit(event: Event) {
         break
     }
   } catch (err) {
-    console.error('submit activation error', err)
+    logError('submit activation error', err)
     updateStatus('验证过程中出现错误，激活码无效。', 'error')
   } finally {
     submitButton?.removeAttribute('disabled')

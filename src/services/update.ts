@@ -1,28 +1,29 @@
 import { check } from '@tauri-apps/plugin-updater'
 import { openUpdateWindow } from '@/components/AudoUpdater.tsx'
 import { ignoreMouseEvents, startMouseEvents } from '@/lib/system.ts'
+import { logError, logInfo } from '@/lib/logger.ts'
 
 export async function checkCurrentAppUpdate() {
   try {
     startMouseEvents('updater').catch((err) => {
-      console.error('start mouse', err as string)
+      logError('start mouse events for updater window failed', err)
     })
     const update = await check()
 
     if (!update) {
-      console.log('✅ 当前已是最新版本')
+      logInfo('✅ 当前已是最新版本')
       return
     }
 
-    console.log(`发现新版本 ${update.version}`)
+    logInfo(`发现新版本 ${update.version}`)
     openUpdateWindow()
       .catch((err) => {
-        console.error('打开更新窗口失败：', err)
+        logError('打开更新窗口失败', err)
       })
       .finally(async () => {
         await ignoreMouseEvents('main')
       })
   } catch (err) {
-    console.error('检查更新失败：', err)
+    logError('检查更新失败', err)
   }
 }

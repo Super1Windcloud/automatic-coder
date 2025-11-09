@@ -54,10 +54,10 @@ pub fn get_screen_capture_to_bytes(states: State<AppState>, _app: tauri::AppHand
 
     #[cfg(target_os = "windows")]
     {
-        dir::create_all("assets", true).unwrap();
+        dir::create_all("assets", false).unwrap();
         let file_path = format!(
             "assets/monitor-{}-{:?}.png",
-            crate::capture::normalized(monitor.name().unwrap()),
+            normalized(monitor.name().unwrap()),
             &direction
         );
         image.save(&file_path).unwrap();
@@ -70,7 +70,7 @@ pub fn get_screen_capture_to_bytes(states: State<AppState>, _app: tauri::AppHand
     {
         let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
         let assets = log_dir.join("assets");
-        dir::create_all(assets.as_path(), true).unwrap();
+        dir::create_all(assets.as_path(), false).unwrap();
 
         let file_path = format!(
             "monitor-{}-{:?}.png",

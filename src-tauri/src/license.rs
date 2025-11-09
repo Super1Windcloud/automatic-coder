@@ -1,3 +1,4 @@
+use dotenv::dotenv;
 use license_manager::{ActivationRepository, LicenseError, VerificationResult};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -244,6 +245,7 @@ pub fn submit_activation_code(
 pub fn prepare_activation_repository(
     app_handle: &AppHandle,
 ) -> Result<Option<ActivationRepository>, LicenseError> {
+    dotenv().unwrap();
     let Some(key) = env::var("ACTIVATION_MASTER_KEY").ok() else {
         println!("activation system disabled: missing ACTIVATION_MASTER_KEY");
         return Ok(None);

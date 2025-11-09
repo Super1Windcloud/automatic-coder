@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { getLLMPrompts, templatePattern } from '@/assets/constant.ts'
+import { logError } from '@/lib/logger.ts'
 
 const selectButton = document.getElementById('select-button')
 const languageSelect = document.getElementById('language-select')
@@ -42,7 +43,7 @@ selectButton?.addEventListener('click', async () => {
       prompt,
     })
   } catch (err) {
-    console.error('调用 Rust 命令失败:', err)
+    logError('调用 Rust 命令失败', err)
   }
 })
 
@@ -69,7 +70,7 @@ async function loadPreferences() {
         config.prompt || ''
     }
   } catch (err) {
-    console.error('加载配置失败', err)
+    logError('加载配置失败', err)
   }
 }
 
