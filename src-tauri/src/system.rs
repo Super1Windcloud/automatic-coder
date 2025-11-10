@@ -1,9 +1,12 @@
-﻿use crate::config::open_language_selector;
+use crate::config::open_language_selector;
 use crate::utils::toggle_webview_devtools;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Manager, Position, Wry};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+static ACTIVATION_SHORTCUT_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
 pub fn show_window(window: tauri::Window) -> Result<(), String> {
@@ -23,12 +26,7 @@ pub fn show_window(window: tauri::Window) -> Result<(), String> {
 }
 
 pub fn create_shortcut(app: &mut App<Wry>) {
-    #[cfg(target_os = "windows")]
-    let hide_or_show_shortcut =
-        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Backquote);
-    #[cfg(target_os = "macos")]
-    let hide_or_show_shortcut =
-        Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::Backquote);
+    let hide_or_show_shortcut = activation_shortcut_definition();
 
     #[cfg(target_os = "windows")]
     let toggle_dev_tools_shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::F12);
@@ -52,6 +50,7 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                                 let window = _app.get_webview_window("main").unwrap();
                                 let config_window =
                                     _app.get_webview_window("code_language_selector");
+                                #[allow(clippy::unnecessary_unwrap)]
                                 if config_window.is_some() {
                                     let config_window = config_window.unwrap();
                                     if config_window.is_visible().unwrap() {
@@ -82,14 +81,40 @@ pub fn create_shortcut(app: &mut App<Wry>) {
     app.global_shortcut()
         .register(toggle_dev_tools_shortcut)
         .unwrap();
-    app.global_shortcut()
-        .register(hide_or_show_shortcut)
-        .unwrap();
 
     app.global_shortcut()
         .register(open_language_window)
         .unwrap();
     app.global_shortcut().register(quit_shortcut).unwrap();
+}
+
+pub fn register_activation_shortcut(app: &AppHandle) {
+    if ACTIVATION_SHORTCUT_REGISTERED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return;
+    }
+    let shortcut = activation_shortcut_definition();
+    if let Err(err) = app.global_shortcut().register(shortcut) {
+        println!("failed to register activation shortcut: {err}");
+        ACTIVATION_SHORTCUT_REGISTERED.store(false, Ordering::SeqCst);
+    }
+}
+
+fn activation_shortcut_definition() -> Shortcut {
+    #[cfg(target_os = "windows")]
+    {
+        Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Backquote)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return Shortcut::new(Some(Modifiers::META | Modifiers::SHIFT), Code::Backquote);
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        return Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Backquote);
+    }
 }
 
 fn graceful_exit(app: &AppHandle) {

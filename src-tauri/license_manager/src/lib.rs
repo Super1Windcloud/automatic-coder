@@ -120,9 +120,8 @@ impl LicenseManager {
             return Err(LicenseError::Decrypt);
         }
         let (nonce_bytes, cipher_text) = payload.split_at(NONCE_LEN);
-        let nonce_array: [u8; NONCE_LEN] = nonce_bytes
-            .try_into()
-            .map_err(|_| LicenseError::Decrypt)?;
+        let nonce_array: [u8; NONCE_LEN] =
+            nonce_bytes.try_into().map_err(|_| LicenseError::Decrypt)?;
         let nonce = Nonce::from(nonce_array);
         let plain = self
             .cipher

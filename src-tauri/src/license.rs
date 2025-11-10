@@ -16,9 +16,15 @@ use tauri::{
 };
 use tempfile::NamedTempFile;
 
-use crate::utils::{is_dev, write_some_log};
+use crate::{
+    system::register_activation_shortcut,
+    utils::{is_dev, write_some_log},
+};
 const REMOTE_ACTIVATION_FILE: &str = "activation_codes.enc";
-const ACTIVATION_STATUS_FILE: &str = "activation_status_fingerprint";
+const ACTIVATION_STATUS_FILE: [&str; 2] = [
+    "activation_status_fingerprint",
+    "cd0621ec3d0ffce82ce0a435ebf5bf25caae51fa4c0d7ba055869b59a93b6585",
+];
 
 pub struct LicenseState {
     inner: Mutex<Option<LicenseInner>>,
@@ -190,6 +196,7 @@ pub async fn submit_activation_code(
 
     match state.verify_and_consume(encrypted_code.trim()).await {
         Ok(VerificationResult::Success) => {
+            register_activation_shortcut(&app);
             if let Some(window) = app.get_webview_window("activation_gate") {
                 let _ = window.hide();
                 let _ = window.close();
@@ -319,12 +326,18 @@ pub fn load_activation_status(roots: &[PathBuf]) -> ActivationStatus {
 
 pub fn persist_status(roots: &[PathBuf], activation_code: &str) -> Result<(), LicenseError> {
     let fingerprint = derive_activation_fingerprint(activation_code);
+    let mut first = true;
     for root in roots {
         let target_dir = root.join(&fingerprint);
         if !target_dir.exists() {
             fs::create_dir_all(&target_dir)?;
         }
-        let path = target_dir.join(ACTIVATION_STATUS_FILE);
+        let path = if first {
+            first = false;
+            target_dir.join(ACTIVATION_STATUS_FILE[1])
+        } else {
+            target_dir.join(ACTIVATION_STATUS_FILE[0])
+        };
         fs::write(path, &fingerprint)?;
     }
     Ok(())
@@ -396,6 +409,7 @@ fn find_status_file(root: &Path) -> Option<PathBuf> {
         return None;
     }
     let entries = fs::read_dir(root).ok()?;
+    let mut first = true;
     for entry in entries.flatten() {
         if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
             continue;
@@ -405,7 +419,12 @@ fn find_status_file(root: &Path) -> Option<PathBuf> {
         if name_str.len() != 64 || !name_str.chars().all(|c| c.is_ascii_hexdigit()) {
             continue;
         }
-        let candidate = entry.path().join(ACTIVATION_STATUS_FILE);
+        let candidate = if first {
+            first = false;
+            entry.path().join(ACTIVATION_STATUS_FILE[1])
+        } else {
+            entry.path().join(ACTIVATION_STATUS_FILE[0])
+        };
         if candidate.exists() {
             return Some(candidate);
         }

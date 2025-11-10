@@ -71,7 +71,8 @@ fn check_activation_status(app: &mut App<Wry>) {
                     if needs_activation {
                         open_activation_window(app.handle());
                     } else {
-                        show_main_window_now(app.handle());
+                        register_activation_shortcut(app.handle());
+                        // show_main_window_now(app.handle());
                     }
                 }
                 Ok(None) => {
@@ -79,12 +80,14 @@ fn check_activation_status(app: &mut App<Wry>) {
                     println!(
                         "activation repository unavailable; continuing without activation gate"
                     );
-                    show_main_window_now(app.handle());
+                    register_activation_shortcut(app.handle());
+                    // show_main_window_now(app.handle());
                 }
                 Err(err) => {
                     state.disable();
                     println!("activation repository initialisation failed: {err}");
-                    show_main_window_now(app.handle());
+                    register_activation_shortcut(app.handle());
+                    // show_main_window_now(app.handle());
                 }
             }
         }
@@ -107,8 +110,8 @@ fn collect_status_roots(app: &App<Wry>) -> Result<Vec<PathBuf>, String> {
     ];
 
     for (label, dir_result) in targets {
-        let dir = dir_result
-            .map_err(|err| format!("failed to resolve {label} directory: {err}"))?;
+        let dir =
+            dir_result.map_err(|err| format!("failed to resolve {label} directory: {err}"))?;
         if !dir.exists() {
             fs::create_dir_all(&dir)
                 .map_err(|err| format!("failed to prepare {label} directory: {err}"))?;
