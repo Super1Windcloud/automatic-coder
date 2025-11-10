@@ -26,7 +26,7 @@ clean:
 zip:
     git archive -o  interview.zip HEAD
 
-bundle:
+publish_updater:
     pnpm tb
 
 publish:
