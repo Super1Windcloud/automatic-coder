@@ -11,3 +11,7 @@ asset
 assets
 dist
 node_modules
+
+*.txt
+app.log
+
