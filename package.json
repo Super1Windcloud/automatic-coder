@@ -1,11 +1,12 @@
 {
   "name": "interview-coder",
   "private": true,
-  "version": "0.1.3",
+  "version": "1.0.4",
   "author": {
     "name": "superwindcloud",
     "email": "ss1178933440@gmail.com"
   },
+  "homepage": "https://github.com/Super1WindCloud",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,7 +19,7 @@
     "icon": "tauri icon  app-icon.png",
     "prepare": "husky",
     "lint": "eslint  src --fix && cd src-tauri && cargo check",
-    "clean": "cd src-tauri && cargo clean && cargo update",
+    "clean": "cd src-tauri && cargo clean",
     "format": "prettier --write src && cd src-tauri &&  cargo fmt",
     "build:select": "vite build --config vite.select.config.ts",
     "custom": "pnpm build && pnpm build:select && pnpm build:activation",
@@ -67,6 +68,7 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
+    "dotenv": "^17.2.3",
     "eslint": "^9.39.1",
     "eslint-plugin-react": "^7.37.5",
     "globals": "^16.5.0",

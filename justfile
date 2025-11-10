@@ -27,7 +27,7 @@ zip:
     git archive -o  interview.zip HEAD
 
 publish_updater:
-    pnpm tb
+    pnpm tb && tsx  ./scripts/publish.ts
 
 publish:
     cn release draft --channel prod 234sdfsdf 1.0.0

@@ -4,9 +4,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Manager, Position, Wry};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 static ACTIVATION_SHORTCUT_REGISTERED: AtomicBool = AtomicBool::new(false);
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tauri::command]
 pub fn show_window(window: tauri::Window) -> Result<(), String> {
@@ -126,11 +128,31 @@ fn graceful_exit(app: &AppHandle) {
     app.exit(0);
 }
 
+pub fn show_about_dialog(app: &AppHandle) {
+    let message = format!(
+        "🌈 **Interview Coder v{}**\n\
+        👤 作者: SuperWindcloud\n\
+        💬 这是一个面向笔试答题场景的桌面应用。\n\n\
+        🌐 联系: ss1178933440@gmail.com \n\n\
+        ✨ 完全透视。真正隐形。\n\
+        即使你的鼠标悬停或点击 InterviewCoder，系统和应用也不会检测到。\n\
+        没有焦点转移，没有标记，没有痕迹。",
+        APP_VERSION
+    );
+
+    let dialog = app.dialog();
+
+    let _ = dialog
+        .message(message)
+        .title("关于 Interview Coder")
+        .blocking_show();
+}
 pub fn create_tray_icon(app: &mut App<Wry>) {
     let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+4")).unwrap();
     let code_language =
         MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();
-    let menu = Menu::with_items(app, &[&code_language, &quit_i]).unwrap();
+    let about_item = MenuItem::with_id(app, "about", "关于", true, Some("")).unwrap();
+    let menu = Menu::with_items(app, &[&about_item, &code_language, &quit_i]).unwrap();
 
     TrayIconBuilder::new()
         .menu(&menu)
@@ -143,6 +165,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             "code_language" => {
                 open_language_selector(app);
             }
+            "about" => show_about_dialog(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
