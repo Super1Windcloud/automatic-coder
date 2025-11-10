@@ -27,7 +27,8 @@ zip:
     git archive -o  interview.zip HEAD
 
 publish_updater:
-    pnpm tb && tsx  ./scripts/publish.ts
+    pnpm tb && node -e "setTimeout(()=>{}, 3000)" && tsx ./scripts/publish.ts
+
 
 publish:
     cn release draft --channel prod 234sdfsdf 1.0.0
