@@ -318,7 +318,12 @@ pub fn show_main_window_now(app_handle: &AppHandle) {
 }
 
 pub fn load_activation_status(roots: &[PathBuf]) -> ActivationStatus {
-    if !roots.is_empty() && roots.iter().all(|root| find_status_file(root).is_some()) {
+    let mut first = true;
+    if !roots.is_empty()
+        && roots
+            .iter()
+            .all(|root| find_status_file(root, &mut first).is_some())
+    {
         return ActivationStatus { activated: true };
     }
     ActivationStatus::default()
@@ -404,12 +409,12 @@ fn collect_machine_signature() -> String {
     parts.join("|")
 }
 
-fn find_status_file(root: &Path) -> Option<PathBuf> {
+fn find_status_file(root: &Path, first: &mut bool) -> Option<PathBuf> {
     if !root.exists() {
+        println!("status root does not exist: {}", root.display());
         return None;
     }
     let entries = fs::read_dir(root).ok()?;
-    let mut first = true;
     for entry in entries.flatten() {
         if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
             continue;
@@ -419,16 +424,20 @@ fn find_status_file(root: &Path) -> Option<PathBuf> {
         if name_str.len() != 64 || !name_str.chars().all(|c| c.is_ascii_hexdigit()) {
             continue;
         }
-        let candidate = if first {
-            first = false;
+        let candidate = if *first {
+            *first = false;
             entry.path().join(ACTIVATION_STATUS_FILE[1])
         } else {
             entry.path().join(ACTIVATION_STATUS_FILE[0])
         };
         if candidate.exists() {
+            println!("found status file: {}", candidate.display());
             return Some(candidate);
+        } else {
+            println!("not found status file: {}", candidate.display());
         }
     }
+
     None
 }
 

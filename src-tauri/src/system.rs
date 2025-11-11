@@ -20,6 +20,7 @@ pub fn show_window(window: tauri::Window) -> Result<(), String> {
         .set_position(Position::Logical((100, 50).into()))
         .unwrap();
     window.set_ignore_cursor_events(true).unwrap();
+
     window
         .show()
         .map_err(|e| format!("Failed to show window: {}", e))?;
@@ -148,6 +149,9 @@ pub fn show_about_dialog(app: &AppHandle) {
         .blocking_show();
 }
 pub fn create_tray_icon(app: &mut App<Wry>) {
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
     let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+4")).unwrap();
     let code_language =
         MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();

@@ -1,7 +1,7 @@
 {
   "name": "interview-coder",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "author": {
     "name": "superwindcloud",
     "email": "ss1178933440@gmail.com"
@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "td": "tauri dev",
-    "tb": "tauri build &&  npx rimraf  bundle &&  mv src-tauri/target/release/bundle   ./bundle",
+    "tb": "tauri build &&  npx rimraf  bundle &&  mv src-tauri/target/release/bundle   ./bundle &&  rm -rf bundle/macos/Interview-Coder.app",
     "icon": "tauri icon  app-icon.png",
     "prepare": "husky",
     "lint": "eslint  src --fix && cd src-tauri && cargo check",
@@ -43,7 +43,7 @@
     "@tauri-apps/plugin-global-shortcut": "~2.3.1",
     "@tauri-apps/plugin-opener": "^2.5.2",
     "@tauri-apps/plugin-process": "^2.3.1",
-    "@tauri-apps/plugin-updater": "~2.9.0",
+    "@tauri-apps/plugin-updater": "~2",
     "@uiw/react-markdown-preview": "^5.1.5",
     "axios": "^1.13.2",
     "class-variance-authority": "^0.7.1",

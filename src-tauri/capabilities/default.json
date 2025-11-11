@@ -2,10 +2,16 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main", "updater"],
+  "windows": [
+    "main",
+    "updater"
+  ],
   "allowlist": {
     "all": true
   },
-  "permissions": ["core:default", "opener:default"],
+  "permissions": [
+    "core:default",
+    "opener:default"
+  ],
   "capabilities": []
 }

@@ -26,6 +26,9 @@ clean:
 zip:
     git archive -o  interview.zip HEAD
 
+bundle:
+    pnpm tb
+
 publish_updater:
     pnpm tb && node -e "setTimeout(()=>{}, 3000)" && tsx ./scripts/publish.ts
 

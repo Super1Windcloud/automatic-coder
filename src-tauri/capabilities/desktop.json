@@ -1,7 +1,17 @@
 {
   "identifier": "desktop-capability",
-  "platforms": ["macOS", "windows", "linux"],
-  "windows": ["main", "updater"],
+  "platforms": [
+    "macOS",
+    "windows",
+    "linux"
+  ],
+  "windows": [
+    "main",
+    "updater"
+  ],
+  "allowlist": {
+    "all": true
+  },
   "permissions": [
     "global-shortcut:allow-is-registered",
     "global-shortcut:allow-register",
@@ -12,13 +22,20 @@
     "core:window:allow-set-position",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:window:allow-set-focus",
     "core:window:allow-inner-size",
     "updater:default",
+    "updater:allow-check",
+    "updater:allow-download-and-install",
     "core:window:allow-get-all-windows",
     "core:webview:allow-create-webview-window",
     {
       "identifier": "core:webview:allow-internal-toggle-devtools",
-      "windows": ["main", "updater", "activation_gate"]
+      "windows": [
+        "main",
+        "updater",
+        "activation_gate"
+      ]
     },
     "core:window:allow-close",
     "opener:allow-open-url",

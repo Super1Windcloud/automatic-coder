@@ -27,19 +27,22 @@ const FILE_URL =
 
 async function fetchTemplate(): Promise<Template> {
   const res = await axios.get(FILE_URL, { responseType: "text" });
-  return res.data as Template;
+  const temp = res.data as string;
+  return JSON.parse(temp) as Template;
 }
 
 const templateStr = await fetchTemplate();
+console.log(templateStr);
 
 templateStr.version = pkg.version;
 
-const signPath = `../bundle/nsis/Interview-Coder_${pkg.version}_x64-setup.exe.sig`;
+const signPath = `../bundle/macos/Interview-Coder.app.tar.gz.sig`;
 
 const signContent = fs.readFileSync(signPath, "utf-8");
-templateStr.platforms["windows-x86_64"].signature = signContent;
-templateStr.platforms["windows-x86_64"].url =
-  `https://gitee.com/SuperWindcloud/rust_default_arg/releases/download/${pkg.version}/Interview-Coder_${pkg.version}_x64-setup.exe`;
+
+templateStr.platforms["darwin-x86_64"].signature = signContent;
+templateStr.platforms["darwin-x86_64"].url =
+  `https://gitee.com/SuperWindcloud/rust_default_arg/releases/download/${pkg.version}/Interview-Coder.app.tar.gz`;
 
 console.log(templateStr);
 
@@ -88,6 +91,54 @@ async function uploadAttach(releaseId: number, filePath: string) {
   }
 }
 
+interface AttachFile {
+  id: number;
+  name: string;
+  size: number;
+  browser_download_url: string;
+  download_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+async function getReleaseAttachFilesAndDeleteExisted(
+  releaseId: number,
+): Promise<AttachFile[]> {
+  const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${releaseId}/attach_files`;
+
+  try {
+    const response = await axios.get<AttachFile[]>(url, {
+      params: {
+        access_token: token,
+      },
+    });
+
+    const data = response.data;
+    const existFiles = data.filter((item) =>
+      item.name.includes("Interview-Coder.app.tar.gz"),
+    );
+
+    if (existFiles.length > 0) {
+      console.log("❌ 已存在 Interview-Coder.app.tar.gz，删除...");
+      for (const file of existFiles) {
+        await axios.delete(
+          `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${releaseId}/attach_files/${file.id}`,
+          {
+            params: {
+              access_token: token,
+            },
+          },
+        );
+      }
+    }
+
+    return data;
+  } catch (error) {
+    console.error("获取附件列表失败:", error);
+    throw error;
+  }
+}
+
 async function uploadAttachInstallerAndCreateRelease() {
   const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases`;
 
@@ -119,10 +170,9 @@ async function uploadAttachInstallerAndCreateRelease() {
   });
   const releaseId = res.data.id;
   console.log(releaseId);
-  await uploadAttach(
-    releaseId,
-    `../bundle/nsis/Interview-Coder_${pkg.version}_x64-setup.exe`,
-  );
+  await getReleaseAttachFilesAndDeleteExisted(releaseId);
+
+  await uploadAttach(releaseId, `../bundle/macos/Interview-Coder.app.tar.gz`);
 }
 
 (async () => {

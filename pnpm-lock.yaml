@@ -45,7 +45,7 @@ importers:
         specifier: ^2.3.1
         version: 2.3.1
       '@tauri-apps/plugin-updater':
-        specifier: ~2.9.0
+        specifier: ~2
         version: 2.9.0
       '@uiw/react-markdown-preview':
         specifier: ^5.1.5
