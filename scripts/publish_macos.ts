@@ -5,7 +5,7 @@ import FormData from "form-data";
 import pkg from "../package.json" with { type: "json" };
 
 dotenv.config({
-  path: "../.env",
+  path: process.cwd() + "/.env",
 });
 
 const owner: string = "SuperWindCloud";
@@ -173,7 +173,10 @@ async function uploadAttachInstallerAndCreateRelease() {
   console.log(releaseId);
   await getReleaseAttachFilesAndDeleteExisted(releaseId);
 
-  await uploadAttach(releaseId, `../bundle/macos/Interview-Coder.app.tar.gz`);
+  await uploadAttach(
+    releaseId,
+    process.cwd() + `/bundle/macos/Interview-Coder.app.tar.gz`,
+  );
 }
 
 (async () => {

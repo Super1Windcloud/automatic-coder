@@ -5,7 +5,7 @@ import FormData from "form-data";
 import pkg from "../package.json" with { type: "json" };
 
 dotenv.config({
-  path: "../.env",
+  path: process.cwd() + "/.env",
 });
 
 const owner: string = "SuperWindCloud";
@@ -39,6 +39,7 @@ const signPath =
   process.cwd() +
   `/bundle/nsis/Interview-Coder_${pkg.version}_x64-setup.exe.sig`;
 
+console.log("Signing file ", signPath);
 const signContent = fs.readFileSync(signPath, "utf-8");
 templateStr.platforms["windows-x86_64"].signature = signContent;
 templateStr.platforms["windows-x86_64"].url =
@@ -173,7 +174,7 @@ async function uploadAttachInstallerAndCreateRelease() {
   await getReleaseAttachFilesAndDeleteExisted(releaseId);
   await uploadAttach(
     releaseId,
-    `../bundle/nsis/Interview-Coder_${pkg.version}_x64-setup.exe`,
+    process.cwd() + `/bundle/nsis/Interview-Coder_${pkg.version}_x64-setup.exe`,
   );
 }
 
