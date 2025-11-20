@@ -238,6 +238,7 @@ async fn request_chat_completion_stream(
     prompt: String,
     image_url: String,
 ) -> Result<String, VlmError> {
+    dbg!(model);
     let messages = json!([
         {
             "role": "system",

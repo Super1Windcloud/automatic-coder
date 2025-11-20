@@ -1,10 +1,8 @@
+import { createHash } from 'crypto'
 
-import {createHash } from 'crypto'
-const str="activation_status_fingerprint";
+const str = 'activation_status_fingerprint'
 
 //不可逆
-const hash = createHash("sha256")
-  .update(str)
-  .digest("hex");
+const hash = createHash('sha256').update(str).digest('hex')
 
-console.log(hash);
+console.log(hash)

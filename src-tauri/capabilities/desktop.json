@@ -1,14 +1,7 @@
 {
   "identifier": "desktop-capability",
-  "platforms": [
-    "macOS",
-    "windows",
-    "linux"
-  ],
-  "windows": [
-    "main",
-    "updater"
-  ],
+  "platforms": ["macOS", "windows", "linux"],
+  "windows": ["main", "updater"],
   "allowlist": {
     "all": true
   },
@@ -31,11 +24,7 @@
     "core:webview:allow-create-webview-window",
     {
       "identifier": "core:webview:allow-internal-toggle-devtools",
-      "windows": [
-        "main",
-        "updater",
-        "activation_gate"
-      ]
+      "windows": ["main", "updater", "activation_gate"]
     },
     "core:window:allow-close",
     "opener:allow-open-url",
