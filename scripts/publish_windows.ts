@@ -28,22 +28,21 @@ const FILE_URL =
 
 async function fetchTemplate(): Promise<Template> {
   const res = await axios.get(FILE_URL, { responseType: "text" });
-  const temp = res.data as string;
-  return JSON.parse(temp) as Template;
+  return JSON.parse(res.data) as Template;
 }
 
 const templateStr = await fetchTemplate();
-console.log(templateStr);
 
 templateStr.version = pkg.version;
 
-const signPath = process.cwd() + `/bundle/macos/Interview-Coder.app.tar.gz.sig`;
+const signPath =
+  process.cwd() +
+  `/bundle/nsis/Interview-Coder_${pkg.version}_x64-setup.exe.sig`;
 
 const signContent = fs.readFileSync(signPath, "utf-8");
-
-templateStr.platforms["darwin-x86_64"].signature = signContent;
-templateStr.platforms["darwin-x86_64"].url =
-  `https://gitee.com/SuperWindcloud/rust_default_arg/releases/download/${pkg.version}/Interview-Coder.app.tar.gz`;
+templateStr.platforms["windows-x86_64"].signature = signContent;
+templateStr.platforms["windows-x86_64"].url =
+  `https://gitee.com/SuperWindcloud/rust_default_arg/releases/download/${pkg.version}/Interview-Coder_${pkg.version}_x64-setup.exe`;
 
 console.log(templateStr);
 
@@ -116,7 +115,7 @@ async function getReleaseAttachFilesAndDeleteExisted(
 
     const data = response.data;
     const existFiles = data.filter((item) =>
-      item.name.includes("Interview-Coder.app.tar.gz"),
+      item.name.includes(`Interview-Coder_${pkg.version}_x64-setup.exe`),
     );
 
     if (existFiles.length > 0) {
@@ -172,8 +171,10 @@ async function uploadAttachInstallerAndCreateRelease() {
   const releaseId = res.data.id;
   console.log(releaseId);
   await getReleaseAttachFilesAndDeleteExisted(releaseId);
-
-  await uploadAttach(releaseId, `../bundle/macos/Interview-Coder.app.tar.gz`);
+  await uploadAttach(
+    releaseId,
+    `../bundle/nsis/Interview-Coder_${pkg.version}_x64-setup.exe`,
+  );
 }
 
 (async () => {

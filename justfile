@@ -21,7 +21,7 @@ clear:
     git rm --cached -r .
 
 clean:
-    cd  src-tauri && cargo clean 
+    cd  src-tauri && cargo clean
 
 zip:
     git archive -o  interview.zip HEAD
@@ -29,9 +29,11 @@ zip:
 bundle:
     pnpm tb
 
-publish_updater:
-    pnpm tb && node -e "setTimeout(()=>{}, 3000)" && tsx ./scripts/publish.ts
+dmg:
+    just bundle &&  tsx scripts/publish_macos.ts
 
+nsis:
+    just bundle &&  tsx scripts/publish_windows.ts
 
 publish:
     cn release draft --channel prod 234sdfsdf 1.0.0
