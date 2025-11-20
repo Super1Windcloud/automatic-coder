@@ -7,10 +7,12 @@ const languageSelect = document.getElementById('language-select')
 const promptInput = document.getElementById('prompt-input')
 const directionSelect = document.getElementById('direction-select')
 const vlmKeyInput = document.getElementById('key-input')
+const modelSelect = document.getElementById('model-select')
 selectButton?.addEventListener('click', async () => {
   const selectedLanguage = (languageSelect as HTMLSelectElement).value
-  const llmPrompt = (promptInput as HTMLInputElement).value.trim()
+  const llmPrompt = (promptInput as HTMLTextAreaElement).value.trim()
   const selectedDirection = (directionSelect as HTMLSelectElement).value
+  const selectedModel = (modelSelect as HTMLSelectElement).value
 
   const vlmKey = (vlmKeyInput as HTMLInputElement).value.trim()
 
@@ -25,6 +27,7 @@ selectButton?.addEventListener('click', async () => {
           vlmKey,
           selectedLanguage,
           selectedDirection,
+          selectedModel,
           prompt,
         }),
       )
@@ -37,6 +40,9 @@ selectButton?.addEventListener('click', async () => {
     })
     await invoke('set_vlm_key', {
       key: vlmKey,
+    })
+    await invoke('set_vlm_model', {
+      model: selectedModel,
     })
 
     await invoke('set_selected_language_prompt', {
@@ -54,6 +60,7 @@ async function loadPreferences() {
       code_language: string
       prompt: string
       direction_enum: string
+      vlm_model: string
     }
     if (config) {
       console.log('Loaded config:', config)
@@ -66,8 +73,10 @@ async function loadPreferences() {
         document.getElementById('direction-select') as HTMLSelectElement
       ).value = config.direction_enum.toLowerCase() || 'left_half'
 
-      ;(document.getElementById('prompt-input') as HTMLInputElement).value =
+      ;(document.getElementById('prompt-input') as HTMLTextAreaElement).value =
         config.prompt || ''
+      ;(document.getElementById('model-select') as HTMLSelectElement).value =
+        config.vlm_model || 'zai-org/GLM-4.5V'
     }
   } catch (err) {
     logError('加载配置失败', err)

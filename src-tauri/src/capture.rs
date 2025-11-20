@@ -54,7 +54,7 @@ pub fn get_screen_capture_to_bytes(states: State<AppState>, _app: tauri::AppHand
 
     #[cfg(target_os = "windows")]
     {
-        dir::create_all("assets", false).unwrap();
+        dir::create_all("assets", true).unwrap();
         let file_path = format!(
             "assets/monitor-{}-{:?}.png",
             normalized(monitor.name().unwrap()),

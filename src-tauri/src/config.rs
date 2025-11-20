@@ -5,17 +5,35 @@ use crate::utils::is_dev;
 use confy::load as load_config;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+pub const DEFAULT_VLM_MODEL: &str = "zai-org/GLM-4.5V";
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(default)]
 pub struct PreferencesConfig {
     direction_enum: DirectionEnum,
     code_language: String,
     prompt: String,
     pub vlm_key: String,
+    pub vlm_model: String,
 }
+
+impl Default for PreferencesConfig {
+    fn default() -> Self {
+        Self {
+            direction_enum: DirectionEnum::default(),
+            code_language: "TypeScript".into(),
+            prompt: String::new(),
+            vlm_key: String::new(),
+            vlm_model: DEFAULT_VLM_MODEL.into(),
+        }
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct AppState {
     pub(crate) prompt: Mutex<String>,
     pub(crate) capture_position: Mutex<DirectionEnum>,
+    pub(crate) vlm_model: Mutex<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -35,6 +53,14 @@ pub fn load_preferences(app: &mut App) {
         let preferences: PreferencesConfig = config;
         let state: State<AppState> = app.state();
         *state.capture_position.lock().unwrap() = preferences.direction_enum;
+        {
+            let mut model_guard = state.vlm_model.lock().unwrap();
+            if preferences.vlm_model.is_empty() {
+                *model_guard = DEFAULT_VLM_MODEL.to_string();
+            } else {
+                *model_guard = preferences.vlm_model.clone();
+            }
+        }
         if preferences.prompt.is_empty() {
             open_language_selector(app.handle())
         } else {
@@ -60,6 +86,19 @@ pub fn set_vlm_key(key: String) {
     }
     let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences").unwrap();
     cfg.vlm_key = key;
+    confy::store("interview-coder-config", "preferences", cfg).unwrap();
+}
+
+#[tauri::command]
+pub fn set_vlm_model(state: State<AppState>, model: String) {
+    if model.is_empty() {
+        return;
+    }
+    {
+        *state.vlm_model.lock().unwrap() = model.clone();
+    }
+    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences").unwrap();
+    cfg.vlm_model = model;
     confy::store("interview-coder-config", "preferences", cfg).unwrap();
 }
 
@@ -124,7 +163,7 @@ pub fn open_language_selector(app_handle: &AppHandle) {
     };
 
     let webview_window = WebviewWindowBuilder::new(app_handle, "code_language_selector", url)
-        .inner_size(800.0, 600.0)
+        .inner_size(800.0, 900.0)
         .build()
         .unwrap();
 

@@ -1,93 +1,111 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>选择你的配置</title>
     <style>
-        body {
-            font-family: "Segoe UI", Arial, sans-serif;
-            padding: 0;
-            margin: 0;
-            background: linear-gradient(135deg, #2c003e, #1a0028); /* 暗紫色渐变背景 */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            color: #eee;
-        }
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        padding: 0;
+        margin: 0;
+        background: linear-gradient(
+          135deg,
+          #2c003e,
+          #1a0028
+        ); /* 暗紫色渐变背景 */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        color: #eee;
+      }
 
-        .card {
-            background: #2a1a40; /* 深紫色卡片 */
-            padding: 30px;
-            border-radius: 16px;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-            width: 400px;
-            max-width: 90%;
-        }
+      .card {
+        background: #2a1a40; /* 深紫色卡片 */
+        padding: 30px;
+        border-radius: 16px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        width: 400px;
+        max-width: 90%;
+      }
 
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-            color: #d1b3ff; /* 浅紫色标题 */
-        }
+      h2 {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #d1b3ff; /* 浅紫色标题 */
+      }
 
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            color: #cfcfcf;
-        }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: bold;
+        color: #cfcfcf;
+      }
 
-        select, input {
-            font-size: 16px;
-            padding: 10px;
-            width: 100%;
-            border: 1px solid #555;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            background: #1f1330;
-            color: #f1eaff;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
+      select,
+      input,
+      textarea {
+        font-size: 16px;
+        padding: 10px;
+        width: 100%;
+        border: 1px solid #555;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        background: #1f1330;
+        color: #f1eaff;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
 
-        select:focus, input:focus {
-            border-color: #9b59b6; /* 紫色高亮 */
-            box-shadow: 0 0 0 3px rgba(155, 89, 182, 0.4);
-            outline: none;
-        }
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
 
-        button {
-            width: 100%;
-            padding: 12px;
-            font-size: 16px;
-            border: none;
-            border-radius: 8px;
-            background: #9b59b6; /* 紫色按钮 */
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-        }
+      select:focus,
+      input:focus,
+      textarea:focus {
+        border-color: #9b59b6; /* 紫色高亮 */
+        box-shadow: 0 0 0 3px rgba(155, 89, 182, 0.4);
+        outline: none;
+      }
 
-        button:hover {
-            background: #8e44ad;
-        }
+      button {
+        width: 100%;
+        padding: 12px;
+        font-size: 16px;
+        border: none;
+        border-radius: 8px;
+        background: #9b59b6; /* 紫色按钮 */
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        transition:
+          background 0.2s,
+          transform 0.1s;
+      }
 
-        button:active {
-            transform: scale(0.98);
-        }
+      button:hover {
+        background: #8e44ad;
+      }
+
+      button:active {
+        transform: scale(0.98);
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <div class="card">
+      <h2>请选择偏好设置</h2>
+      <p style="text-align: center; color: lightpink; cursor: pointer">
+        关闭之后可通过托盘再次打开
+      </p>
 
-<div class="card">
-    <h2>请选择偏好设置</h2>
-    <p style="text-align: center; color:lightpink; cursor:pointer;">关闭之后可通过托盘再次打开</p>
-
-    <label for="language-select">💻 编程语言</label>
-    <select id="language-select">
+      <label for="language-select">💻 编程语言</label>
+      <select id="language-select">
         <option value="TypeScript">TypeScript</option>
         <option value="JavaScript">JavaScript</option>
         <option value="Python">Python</option>
@@ -104,24 +122,43 @@
         <option value="Dart">Dart</option>
         <option value="Scala">Scala</option>
         <option value="Elixir">Elixir</option>
-    </select>
-    <label for="direction-select">🌍截图方位选择</label>
-    <select id="direction-select">
+      </select>
+      <label for="direction-select">🌍截图方位选择</label>
+      <select id="direction-select">
         <option value="lefthalf">屏幕左半边</option>
         <option value="righthalf">屏幕右半边</option>
         <option value="uphalf">屏幕上半边</option>
         <option value="downhalf">屏幕下半边</option>
         <option value="fullscreen">全屏</option>
-    </select>
+      </select>
 
-    <label for="prompt-input">✨ 提示词 (Prompt)</label>
-    <input style="width: 95%" type="text" id="prompt-input" placeholder="空则为默认...">
-    <label for="key-input">✨ 硅基流动APIKEY</label>
-    <input style="width: 95%" type="text" id="key-input" placeholder="默认隐藏...">
-    <button id="select-button">确认选择</button>
-</div>
+      <label for="prompt-input">✨ 提示词 (Prompt)</label>
+      <textarea
+        style="scrollbar-width: none"
+        id="prompt-input"
+        placeholder="空则为默认..."
+      ></textarea>
+      <label for="model-select">🧠 大模型</label>
+      <select id="model-select">
+        <option value="zai-org/GLM-4.5V">zai-org / GLM-4.5V</option>
+        <!--<option value="Qwen/Qwen3-VL-235B-A22B-Instruct">
+          Qwen / Qwen3-VL-235B-A22B-Instruct
+        </option>
+        <option value="Qwen/Qwen3-VL-235B-A22B-Thinking">
+          Qwen / Qwen3-VL-235B-A22B-Thinking
+        </option>-->
+        <option value="stepfun-ai/step3">stepfun-ai / step3</option>
+      </select>
+      <label for="key-input">✨ 硅基流动APIKEY</label>
+      <input
+        style="width: 95%"
+        type="text"
+        id="key-input"
+        placeholder="默认隐藏..."
+      />
+      <button id="select-button">确认选择</button>
+    </div>
 
-<script type="module" src="/src/select.ts"></script>
-
-</body>
+    <script type="module" src="/src/select.ts"></script>
+  </body>
 </html>

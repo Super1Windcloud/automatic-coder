@@ -44,6 +44,7 @@ pub fn run() {
             set_selected_language_prompt,
             create_screenshot_solution_stream,
             set_vlm_key,
+            set_vlm_model,
             append_app_log,
             get_activation_status,
             submit_activation_code
