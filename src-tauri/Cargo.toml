@@ -1,6 +1,6 @@
 [package]
 name = "interview-coder"
-version = "1.0.6"
+version = "1.0.7"
 description = "A Tauri App for interview coder"
 authors = ["Superwindcloud <<117893440@qq.com>>"]
 edition = "2024"
@@ -42,6 +42,3 @@ tauri-plugin-notification = "2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-updater = "2"
-
-
-

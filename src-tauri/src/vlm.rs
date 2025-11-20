@@ -83,7 +83,7 @@ fn append_delta_field(app_handle: &AppHandle, field: Option<&Value>, buffer: &mu
     appended
 }
 
-fn append_plain_field(field: Option<&Value>, buffer: &mut String) -> Option<String> {
+fn collect_plain_chunk(field: Option<&Value>) -> Option<String> {
     if let Some(value) = field {
         let mut chunk = String::new();
         match value {
@@ -104,9 +104,16 @@ fn append_plain_field(field: Option<&Value>, buffer: &mut String) -> Option<Stri
             _ => {}
         }
         if !chunk.is_empty() {
-            buffer.push_str(&chunk);
             return Some(chunk);
         }
+    }
+    None
+}
+
+fn append_plain_field(field: Option<&Value>, buffer: &mut String) -> Option<String> {
+    if let Some(chunk) = collect_plain_chunk(field) {
+        buffer.push_str(&chunk);
+        return Some(chunk);
     }
     None
 }
@@ -153,9 +160,12 @@ async fn request_chat_completion_stream_thinking(prompt: String, image_url: Stri
     let api_key = get_env_key("SiliconflowVLM");
     let client = Client::new();
     let body = json!({
-        "model": "stepfun-ai/step3",
-        // "model": "zai-org/GLM-4.5V",
-        "messages": messages
+        "model": "stepfun-ai/step3", // 16S
+        "thinking_budget" :1,
+        // "model": "zai-org/GLM-4.5V", // 3S
+        // "model" :"Qwen/Qwen3-VL-235B-A22B-Instruct", // 117S
+        "messages": messages,
+        "stream" :true
     });
 
     let mut res = client
@@ -274,6 +284,7 @@ async fn request_chat_completion_stream(
             "model": model,
             "stream": true,
             "messages": messages,
+            "thinking_budget" :1
         })
     } else {
         json!(null)
@@ -354,20 +365,19 @@ async fn request_chat_completion_stream(
                 if let Some(delta_obj) = delta {
                     appended |=
                         append_delta_field(app_handle, delta_obj.get("content"), &mut result);
-                    appended |= append_delta_field(
-                        app_handle,
-                        delta_obj.get("reasoning_content"),
-                        &mut result,
-                    );
+                    if let Some(reasoning) = collect_plain_chunk(delta_obj.get("reasoning_content"))
+                    {
+                        println!("reasoning_content: {}", reasoning);
+                    }
                 }
                 if let Some(message_obj) = message {
                     appended |=
                         append_delta_field(app_handle, message_obj.get("content"), &mut result);
-                    appended |= append_delta_field(
-                        app_handle,
-                        message_obj.get("reasoning_content"),
-                        &mut result,
-                    );
+                    if let Some(reasoning) =
+                        collect_plain_chunk(message_obj.get("reasoning_content"))
+                    {
+                        println!("reasoning_content: {}", reasoning);
+                    }
                 }
 
                 if !appended {
