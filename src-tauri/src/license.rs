@@ -1,14 +1,14 @@
 use dirs::home_dir;
 use dotenv::{dotenv, from_filename};
 use license_manager::{ActivationRepository, LicenseError, VerificationResult};
-use reqwest::{multipart, Client};
+use reqwest::{Client, multipart};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::{self, Write};
 use std::io::Write as IoWrite;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::{env, fs};
 use tauri::{

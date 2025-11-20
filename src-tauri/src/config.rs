@@ -1,4 +1,6 @@
-﻿use std::sync::Mutex;
+#![allow(clippy::let_and_return)]
+
+use std::sync::Mutex;
 use tauri::{App, AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::utils::is_dev;
@@ -6,6 +8,7 @@ use confy::load as load_config;
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_VLM_MODEL: &str = "zai-org/GLM-4.5V";
+pub const STEPFUN_VLM_MODEL: &str = "stepfun-ai/step3";
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(default)]
@@ -102,6 +105,28 @@ pub fn set_vlm_model(state: State<AppState>, model: String) {
     confy::store("interview-coder-config", "preferences", cfg).unwrap();
 }
 
+pub fn toggle_vlm_model(app_handle: &AppHandle) -> Result<String, String> {
+    let state: State<AppState> = app_handle.state();
+    let mut guard = state
+        .vlm_model
+        .lock()
+        .map_err(|_| "模型状态锁获取失败".to_string())?;
+    let target = if guard.as_str() == DEFAULT_VLM_MODEL {
+        STEPFUN_VLM_MODEL
+    } else {
+        DEFAULT_VLM_MODEL
+    };
+    *guard = target.to_string();
+
+    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences")
+        .map_err(|err| format!("加载配置失败: {err}"))?;
+    cfg.vlm_model = target.to_string();
+    confy::store("interview-coder-config", "preferences", cfg)
+        .map_err(|err| format!("保存配置失败: {err}"))?;
+
+    Ok(target.to_string())
+}
+
 #[tauri::command]
 pub fn set_capture_position(state: State<AppState>, position: String) {
     let position = match position.as_str() {
@@ -153,6 +178,12 @@ pub fn open_language_selector(app_handle: &AppHandle) {
             .unwrap()
             .set_always_on_top(true)
             .unwrap();
+        app_handle
+            .get_webview_window("code_language_selector")
+            .unwrap()
+            .set_focus()
+            .unwrap();
+
         return;
     }
 
@@ -173,6 +204,7 @@ pub fn open_language_selector(app_handle: &AppHandle) {
     webview_window.set_decorations(false).unwrap();
     webview_window.set_skip_taskbar(true).unwrap();
     webview_window.set_enabled(true).unwrap();
+    webview_window.set_always_on_top(true).unwrap();
     webview_window.show().unwrap();
 }
 

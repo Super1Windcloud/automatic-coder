@@ -8,8 +8,8 @@ mod vlm;
 use crate::{
     config::AppState,
     license::{
-        get_activation_status, open_activation_window, prepare_activation_repository,
-        show_main_window_now, submit_activation_code, LicenseState,
+        LicenseState, get_activation_status, open_activation_window, prepare_activation_repository,
+        show_main_window_now, submit_activation_code,
     },
 };
 use capture::*;
@@ -29,6 +29,7 @@ pub fn run() {
     dotenv().ok();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .manage(LicenseState::default())

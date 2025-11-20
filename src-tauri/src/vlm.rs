@@ -269,13 +269,18 @@ async fn request_chat_completion_stream(
             "messages": messages,
             "enable_thinking" :false
         })
-    } else {
+    } else if model == "stepfun-ai/step3" {
         json!({
             "model": model,
             "stream": true,
             "messages": messages,
         })
+    } else {
+        json!(null)
     };
+    if body.is_null() {
+        return Err(VlmError::Api(String::from("暂不支持该模型")));
+    }
 
     let send_future = client
         .post("https://api.siliconflow.cn/v1/chat/completions")

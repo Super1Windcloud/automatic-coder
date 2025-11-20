@@ -1,11 +1,12 @@
-use crate::config::open_language_selector;
-use crate::utils::toggle_webview_devtools;
+use crate::config::{open_language_selector, toggle_vlm_model};
+use crate::utils::{is_dev, toggle_webview_devtools, write_some_log};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Manager, Position, Wry};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_notification::NotificationExt;
 
 static ACTIVATION_SHORTCUT_REGISTERED: AtomicBool = AtomicBool::new(false);
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -38,7 +39,8 @@ pub fn create_shortcut(app: &mut App<Wry>) {
 
     let open_language_window = Shortcut::new(Some(Modifiers::ALT), Code::Digit3);
 
-    let quit_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Digit4);
+    let quit_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Digit5);
+    let toggle_model_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Digit4);
 
     app.handle()
         .plugin(
@@ -70,11 +72,61 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                             }
                         }
                     } else if shortcut == &toggle_dev_tools_shortcut {
-                        toggle_webview_devtools(_app)
+                        match event.state() {
+                            ShortcutState::Pressed => {
+                                println!("{:?}", shortcut);
+                            }
+                            ShortcutState::Released => toggle_webview_devtools(_app),
+                        }
                     } else if shortcut == &open_language_window {
-                        open_language_selector(_app)
+                        match event.state() {
+                            ShortcutState::Pressed => {
+                                println!("{:?}", shortcut);
+                            }
+                            ShortcutState::Released => open_language_selector(_app),
+                        }
                     } else if shortcut == &quit_shortcut {
-                        graceful_exit(_app)
+                        match event.state() {
+                            ShortcutState::Pressed => {
+                                println!("{:?}", shortcut);
+                            }
+                            ShortcutState::Released => graceful_exit(_app),
+                        }
+                    } else if shortcut == &toggle_model_shortcut {
+                        dbg!("toggle vlm model");
+                        match event.state() {
+                            ShortcutState::Pressed => {
+                                println!("{:?}", shortcut);
+                            }
+                            ShortcutState::Released => match toggle_vlm_model(_app) {
+                                Ok(model) => {
+                                    if is_dev() {
+                                        _app.notification()
+                                            .builder()
+                                            .title("Tauri")
+                                            .body(format!("Tauri VLM Model is {model:?}"))
+                                            .show()
+                                            .unwrap()
+                                    } else {
+                                        write_some_log(
+                                            format!("Tauri VLM Model is {model:?}").as_str(),
+                                        )
+                                    }
+                                }
+                                Err(err) => {
+                                    if is_dev() {
+                                        _app.notification()
+                                            .builder()
+                                            .title("Tauri")
+                                            .body(err)
+                                            .show()
+                                            .unwrap()
+                                    } else {
+                                        write_some_log(&err)
+                                    }
+                                }
+                            },
+                        }
                     }
                 })
                 .build(),
@@ -89,6 +141,9 @@ pub fn create_shortcut(app: &mut App<Wry>) {
         .register(open_language_window)
         .unwrap();
     app.global_shortcut().register(quit_shortcut).unwrap();
+    app.global_shortcut()
+        .register(toggle_model_shortcut)
+        .unwrap();
 }
 
 pub fn register_activation_shortcut(app: &AppHandle) {
@@ -152,11 +207,14 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
     #[cfg(target_os = "macos")]
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-    let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+4")).unwrap();
+    let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+5")).unwrap();
     let code_language =
         MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();
+    let toggle_model =
+        MenuItem::with_id(app, "toggle_model", "切换模型", true, Some("Alt+4")).unwrap();
     let about_item = MenuItem::with_id(app, "about", "关于", true, Some("")).unwrap();
-    let menu = Menu::with_items(app, &[&about_item, &code_language, &quit_i]).unwrap();
+    let menu =
+        Menu::with_items(app, &[&about_item, &code_language, &toggle_model, &quit_i]).unwrap();
 
     TrayIconBuilder::new()
         .menu(&menu)
@@ -169,6 +227,32 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             "code_language" => {
                 open_language_selector(app);
             }
+            "toggle_model" => match toggle_vlm_model(app) {
+                Ok(model) => {
+                    if is_dev() {
+                        app.notification()
+                            .builder()
+                            .title("Tauri")
+                            .body(format!("Tauri VLM Model is {model:?}"))
+                            .show()
+                            .unwrap()
+                    } else {
+                        write_some_log(format!("Tauri VLM Model is {model:?}").as_str())
+                    }
+                }
+                Err(err) => {
+                    if is_dev() {
+                        app.notification()
+                            .builder()
+                            .title("Tauri")
+                            .body(err)
+                            .show()
+                            .unwrap()
+                    } else {
+                        write_some_log(&err)
+                    }
+                }
+            },
             "about" => show_about_dialog(app),
             _ => {}
         })
