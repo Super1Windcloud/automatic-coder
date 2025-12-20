@@ -42,3 +42,35 @@ tauri-plugin-notification = "2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-updater = "2"
+
+[profile.dev]
+debug = 0
+
+#最快编译时间
+[profile.release]
+lto = false
+codegen-units = 256
+panic = "abort"
+debug = 0
+
+# 最快运行性能
+[profile.perf]
+inherits = "release"
+opt-level = 3
+debug = false
+strip = "none"
+lto = true
+codegen-units = 1
+incremental = false
+panic = "abort"
+
+# 最小二进制
+[profile.minsize]
+inherits = "release"
+opt-level = "z"
+debug = false
+strip = true
+lto = true
+codegen-units = 1
+incremental = false
+panic = "abort"
