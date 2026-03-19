@@ -58,7 +58,7 @@
       },
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0QzAzRDA5QjIyM0I0OUIKUldTYnRDT3lDVDNBUkxFbFlkQmZqQzhEZEVKYTBPZ0ZMbW1Hd3hZNU9GazVXK1VCWi9Ba1hpem8K",
       "endpoints": [
-        "https://github.com/Super1Windcloud/automatic-coder/releases/latest/download/latest.json"
+        "https://raw.githubusercontent.com/Super1Windcloud/automatic-coder/refs/heads/master/latest.json"
       ]
     }
   }
