@@ -143,16 +143,16 @@ pub struct ActivationAttemptPayload {
 }
 #[derive(Clone)]
 pub struct ActivationBootstrap {
-    activation_key: String,
-    remote: RemoteActivationConfig,
+    pub activation_key: String,
+    pub remote: RemoteActivationConfig,
 }
 
 #[derive(Clone)]
-struct RemoteActivationConfig {
-    owner: String,
-    repo: String,
-    tag: String,
-    token: String,
+pub struct RemoteActivationConfig {
+    pub owner: String,
+    pub repo: String,
+    pub tag: String,
+    pub token: String,
 }
 
 #[tauri::command]

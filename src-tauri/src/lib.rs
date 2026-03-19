@@ -8,8 +8,9 @@ mod vlm;
 use crate::{
     config::AppState,
     license::{
-        LicenseState, get_activation_status, open_activation_window, prepare_activation_repository,
-        show_main_window_now, submit_activation_code,
+        ActivationBootstrap, LicenseState, RemoteActivationConfig, get_activation_status,
+        open_activation_window, prepare_activation_repository, show_main_window_now,
+        submit_activation_code,
     },
 };
 use capture::*;
@@ -54,11 +55,38 @@ pub fn run() {
             create_tray_icon(app);
             create_shortcut(app);
             load_preferences(app);
-            check_activation_status(app);
+            check_activation_status_cheat(app);
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn check_activation_status_cheat(app: &mut App<Wry>) {
+    let state: tauri::State<LicenseState> = app.state();
+
+    // 1. 依然获取路径，确保 state.inner 不是 None
+    if let Ok(status_roots) = collect_status_roots(app) {
+        // 构造一个假的引导数据
+        let bootstrap = ActivationBootstrap {
+            activation_key: "DEV_KEY".into(),
+            remote: RemoteActivationConfig {
+                owner: "".into(),
+                repo: "".into(),
+                tag: "".into(),
+                token: "".into(),
+            },
+        };
+
+        // 2. 强制初始化为“已激活”状态
+        state.initialize(bootstrap, status_roots, true);
+
+        // 3. 必须注册快捷键
+        register_activation_shortcut(app.handle());
+
+        // 4. 显式显示主窗口
+        show_main_window_now(app.handle());
+    }
 }
 
 fn check_activation_status(app: &mut App<Wry>) {
