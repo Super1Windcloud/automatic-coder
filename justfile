@@ -39,3 +39,7 @@ publish:
     cn release draft --channel prod 234sdfsdf 1.0.0
     cn release upload--update-platform windows-x86_64 --channel prod --file <FILE>234sdfsdf $1.0.0
     cn release publish  --channel prod 234sdfsdf 1.0.0
+
+
+build:
+    cd src-tauri && cargo build 

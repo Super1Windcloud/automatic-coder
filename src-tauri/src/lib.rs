@@ -55,7 +55,7 @@ pub fn run() {
             create_tray_icon(app);
             create_shortcut(app);
             load_preferences(app);
-            check_activation_status_cheat(app);
+            check_activation_status(app);
             Ok(())
         })
         .run(tauri::generate_context!())

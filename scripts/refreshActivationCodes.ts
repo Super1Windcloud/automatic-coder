@@ -66,7 +66,7 @@ export async function getGithubReleaseByTag(
 
   const res = await axios.get<GithubRelease>(url, {
     headers: {
-      Authorization: `token ${accessToken}`,
+      Authorization: `Bearer ${accessToken}`,
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'Axios-Client',
     },
@@ -108,7 +108,7 @@ async function deleteAsset(assetId: number) {
   const url = `https://api.github.com/repos/${owner}/${repo}/releases/assets/${assetId}`
   await axios.delete(url, {
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'Axios-Client',
     },
@@ -141,7 +141,7 @@ export async function downloadActivateCodeFileAndDeleteAttach() {
   try {
     const res = await axios.get(url, {
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         Accept: 'application/octet-stream',
         'User-Agent': 'Axios-Client',
       },
@@ -174,7 +174,7 @@ export async function updateActivationCodeFile(
   try {
     await axios.post(url, fileData, {
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/octet-stream',
         'User-Agent': 'Axios-Client',
       },

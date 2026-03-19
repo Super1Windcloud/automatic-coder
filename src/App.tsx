@@ -27,7 +27,7 @@ const MainApp = ({
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       {/*暂时跳过更新检测*/}
-      {/*<AutoUpdater />*/}
+      <AutoUpdater />
       <Toaster />
       <HashRouter>
         <Routes>

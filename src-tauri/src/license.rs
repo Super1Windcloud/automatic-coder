@@ -554,7 +554,7 @@ async fn fetch_release_by_tag(
     );
     let response = client
         .get(url)
-        .header("Authorization", format!("token {}", config.token))
+        .header("Authorization", format!("Bearer {}", config.token))
         .header("Accept", "application/vnd.github.v3+json")
         .header("User-Agent", "InterviewCoder")
         .send()
@@ -580,7 +580,7 @@ async fn fetch_activation_asset(
     );
     let response = client
         .get(url)
-        .header("Authorization", format!("token {}", config.token))
+        .header("Authorization", format!("Bearer {}", config.token))
         .header("Accept", "application/vnd.github.v3+json")
         .header("User-Agent", "InterviewCoder")
         .send()
@@ -621,7 +621,7 @@ async fn download_activation_payload(
     );
     let response = client
         .get(url)
-        .header("Authorization", format!("token {}", config.token))
+        .header("Authorization", format!("Bearer {}", config.token))
         .header("Accept", "application/octet-stream")
         .header("User-Agent", "InterviewCoder")
         .send()
@@ -647,7 +647,7 @@ async fn delete_activation_asset(
     );
     let response = client
         .delete(url)
-        .header("Authorization", format!("token {}", config.token))
+        .header("Authorization", format!("Bearer {}", config.token))
         .header("Accept", "application/vnd.github.v3+json")
         .header("User-Agent", "InterviewCoder")
         .send()
@@ -676,7 +676,7 @@ async fn upload_activation_payload(
     let bytes = fs::read(path)?;
     let response = client
         .post(url)
-        .header("Authorization", format!("token {}", config.token))
+        .header("Authorization", format!("Bearer {}", config.token))
         .header("Content-Type", "application/octet-stream")
         .header("User-Agent", "InterviewCoder")
         .body(bytes)

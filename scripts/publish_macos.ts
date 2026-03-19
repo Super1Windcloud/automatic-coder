@@ -27,7 +27,7 @@ async function fetchTemplate(): Promise<Template> {
   try {
     const res = await axios.get(url, {
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github.v3.raw',
         'User-Agent': 'Axios-Client',
       },
@@ -74,7 +74,7 @@ async function getFileInfo() {
   try {
     const { data } = await axios.get(url, {
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'Axios-Client',
       },
@@ -96,7 +96,7 @@ async function updateJsonFile(newContent: string, sha: string | null) {
     sha: sha || undefined,
   }, {
     headers: {
-      Authorization: `token ${token}`,
+      Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'Axios-Client',
     },
@@ -113,7 +113,7 @@ async function uploadAsset(uploadUrl: string, filePath: string, fileName: string
   try {
     await axios.post(url, fileData, {
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/octet-stream',
         'User-Agent': 'Axios-Client',
       },
@@ -132,7 +132,7 @@ async function getOrCreateRelease() {
     const tagUrl = `${releasesUrl}/tags/${pkg.version}`
     const { data: existingRelease } = await axios.get(tagUrl, {
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'Axios-Client',
       },
@@ -147,7 +147,7 @@ async function getOrCreateRelease() {
       prerelease: false,
     }, {
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'Axios-Client',
       },
@@ -163,7 +163,7 @@ async function deleteExistingAsset(release: any, fileName: string) {
     const url = `https://api.github.com/repos/${owner}/${repo}/releases/assets/${asset.id}`
     await axios.delete(url, {
       headers: {
-        Authorization: `token ${token}`,
+        Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github.v3+json',
         'User-Agent': 'Axios-Client',
       },
