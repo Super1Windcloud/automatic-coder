@@ -1,7 +1,7 @@
 use dirs::home_dir;
 use dotenv::{dotenv, from_filename};
 use license_manager::{ActivationRepository, LicenseError, VerificationResult};
-use reqwest::{Client, multipart};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::{self, Write};
@@ -21,6 +21,8 @@ use crate::{
     utils::{is_dev, write_some_log},
 };
 const REMOTE_ACTIVATION_FILE: &str = "activation_codes.enc";
+const DEFAULT_ACTIVATION_REMOTE_URL: &str =
+    "https://raw.githubusercontent.com/Super1Windcloud/automatic-coder/refs/heads/master/src-tauri/enc/activation_codes.enc";
 const ACTIVATION_STATUS_FILE: [&str; 2] = [
     "activation_status_fingerprint",
     "cd0621ec3d0ffce82ce0a435ebf5bf25caae51fa4c0d7ba055869b59a93b6585",
@@ -153,6 +155,7 @@ pub struct RemoteActivationConfig {
     pub repo: String,
     pub tag: String,
     pub token: String,
+    pub raw_url: String,
 }
 
 #[tauri::command]
@@ -229,7 +232,10 @@ pub fn prepare_activation_repository(
     app_handle: &AppHandle,
 ) -> Result<Option<ActivationBootstrap>, LicenseError> {
     hydrate_activation_env();
-    let Some(key) = env::var("ACTIVATION_MASTER_KEY").ok() else {
+    let Some(key) = env::var("ACTIVATION_MASTER_KEY")
+        .ok()
+        .or_else(|| option_env!("ACTIVATION_MASTER_KEY").map(|value| value.to_string()))
+    else {
         if is_dev() {
             println!("activation system disabled: missing ACTIVATION_MASTER_KEY");
         } else {
@@ -248,19 +254,31 @@ pub fn prepare_activation_repository(
     }
 
     let owner = env::var("ACTIVATION_REMOTE_OWNER")
-        .or_else(|_| env::var("GITHUB_OWNER"))
-        .unwrap_or_else(|_| "Super1Windcloud".to_string());
+        .ok()
+        .or_else(|| option_env!("ACTIVATION_REMOTE_OWNER").map(|value| value.to_string()))
+        .or_else(|| env::var("GITHUB_OWNER").ok())
+        .unwrap_or_else(|| "Super1Windcloud".to_string());
     let repo = env::var("ACTIVATION_REMOTE_REPO")
-        .or_else(|_| env::var("GITHUB_REPO"))
-        .unwrap_or_else(|_| "automatic-coder".to_string());
+        .ok()
+        .or_else(|| option_env!("ACTIVATION_REMOTE_REPO").map(|value| value.to_string()))
+        .or_else(|| env::var("GITHUB_REPO").ok())
+        .unwrap_or_else(|| "automatic-coder".to_string());
     let tag = env::var("ACTIVATION_REMOTE_TAG")
-        .or_else(|_| env::var("GITHUB_RELEASE_TAG"))
-        .unwrap_or_else(|_| app_handle.package_info().version.to_string());
+        .ok()
+        .or_else(|| option_env!("ACTIVATION_REMOTE_TAG").map(|value| value.to_string()))
+        .or_else(|| env::var("GITHUB_RELEASE_TAG").ok())
+        .unwrap_or_else(|| app_handle.package_info().version.to_string());
     let token = env::var("ACTIVATION_REMOTE_TOKEN")
-        .or_else(|_| env::var("GITHUB_TOKEN"))
+        .ok()
+        .or_else(|| option_env!("ACTIVATION_REMOTE_TOKEN").map(|value| value.to_string()))
+        .or_else(|| env::var("GITHUB_TOKEN").ok())
         .unwrap_or_default();
+    let raw_url = env::var("ACTIVATION_REMOTE_URL")
+        .ok()
+        .or_else(|| option_env!("ACTIVATION_REMOTE_URL").map(|value| value.to_string()))
+        .unwrap_or_else(|| DEFAULT_ACTIVATION_REMOTE_URL.to_string());
 
-    if token.trim().is_empty() {
+    if token.trim().is_empty() && raw_url.trim().is_empty() {
         if is_dev() {
             println!("activation system disabled: missing GITHUB_TOKEN/ACTIVATION_REMOTE_TOKEN");
         } else {
@@ -276,6 +294,7 @@ pub fn prepare_activation_repository(
             repo,
             tag,
             token,
+            raw_url,
         },
     }))
 }
@@ -493,10 +512,10 @@ const GITHUB_API_BASE: &str = "https://api.github.com";
 struct RemoteActivationLock {
     config: RemoteActivationConfig,
     client: Client,
-    release_id: u64,
-    asset_id: u64,
+    release_id: Option<u64>,
+    asset_id: Option<u64>,
     file_name: String,
-    upload_url: String,
+    upload_url: Option<String>,
     file: NamedTempFile,
 }
 
@@ -506,18 +525,31 @@ impl RemoteActivationLock {
         client: Client,
     ) -> Result<Self, ActivationFlowError> {
         write_some_log("acquiring remote activation payload");
-        let release = fetch_release_by_tag(&client, &config).await?;
-        let asset = fetch_activation_asset(&client, &config, release.id).await?;
-        let payload = download_activation_payload(&client, &config, asset.id).await?;
+        let (release_id, asset_id, file_name, upload_url, payload) =
+            if !config.raw_url.trim().is_empty() {
+                let payload = download_activation_payload_direct(&client, &config.raw_url).await?;
+                (None, None, REMOTE_ACTIVATION_FILE.to_string(), None, payload)
+            } else {
+                let release = fetch_release_by_tag(&client, &config).await?;
+                let asset = fetch_activation_asset(&client, &config, release.id).await?;
+                let payload = download_activation_payload(&client, &config, asset.id).await?;
+                (
+                    Some(release.id),
+                    Some(asset.id),
+                    asset.name,
+                    Some(release.upload_url),
+                    payload,
+                )
+            };
         let mut file = NamedTempFile::new()?;
         file.write_all(&payload)?;
         Ok(Self {
             config,
             client,
-            release_id: release.id,
-            asset_id: asset.id,
-            file_name: asset.name,
-            upload_url: release.upload_url,
+            release_id,
+            asset_id,
+            file_name,
+            upload_url,
             file,
         })
     }
@@ -537,6 +569,18 @@ impl RemoteActivationLock {
             upload_url,
             file,
         } = self;
+
+        if !config.raw_url.trim().is_empty() {
+            write_some_log("activation payload is read-only; skipping remote refresh");
+            return Ok(());
+        }
+
+        let asset_id = asset_id.ok_or_else(|| {
+            ActivationFlowError::Remote("missing activation asset id".into())
+        })?;
+        let upload_url = upload_url.ok_or_else(|| {
+            ActivationFlowError::Remote("missing activation upload url".into())
+        })?;
 
         delete_activation_asset(&client, &config, asset_id).await?;
         let path = file.path().to_path_buf();
@@ -635,6 +679,25 @@ async fn download_activation_payload(
         .get(url)
         .header("Authorization", format!("Bearer {}", config.token))
         .header("Accept", "application/octet-stream")
+        .header("User-Agent", "InterviewCoder")
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(ActivationFlowError::Remote(format!(
+            "failed to download activation payload ({status}): {body}"
+        )));
+    }
+    Ok(response.bytes().await?.to_vec())
+}
+
+async fn download_activation_payload_direct(
+    client: &Client,
+    url: &str,
+) -> Result<Vec<u8>, ActivationFlowError> {
+    let response = client
+        .get(url)
         .header("User-Agent", "InterviewCoder")
         .send()
         .await?;

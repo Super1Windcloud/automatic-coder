@@ -75,6 +75,7 @@ fn check_activation_status_cheat(app: &mut App<Wry>) {
                 repo: "".into(),
                 tag: "".into(),
                 token: "".into(),
+                raw_url: "".into(),
             },
         };
 

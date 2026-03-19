@@ -12,4 +12,4 @@ assets
 dist
 node_modules
 app.log
-
+activation_codes_client.txt
