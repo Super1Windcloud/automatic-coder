@@ -52,6 +52,15 @@ function App() {
   const [hasSolution, setHasSolution] = useState(false);
 
   const hasRegistered = useRef(false); // 使用 useRef 来确保只注册一次
+  const blockReloadShortcut = (event: KeyboardEvent) => {
+    if (event.key.toLowerCase() !== "r") {
+      return;
+    }
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
 
   const revealMainWindow = async () => {
     try {
@@ -108,6 +117,17 @@ function App() {
         unlistenActivation();
         unlistenActivation = null;
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("keydown", blockReloadShortcut, {
+      capture: true,
+    });
+    return () => {
+      window.removeEventListener("keydown", blockReloadShortcut, {
+        capture: true,
+      });
     };
   }, []);
 
