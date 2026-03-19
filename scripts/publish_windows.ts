@@ -1,17 +1,16 @@
 import * as fs from 'node:fs'
 import axios from 'axios'
 import dotenv from 'dotenv'
-import FormData from 'form-data'
 import pkg from '../package.json' with { type: 'json' }
 
 dotenv.config({
   path: process.cwd() + '/.env',
 })
 
-const owner: string = 'SuperWindCloud'
-const repo: string = 'rust_default_arg'
-const path: string = 's3'
-const token: string = process.env.GITEE_TOKEN || ''
+const owner: string = 'Super1Windcloud'
+const repo: string = 'automatic-coder'
+const path: string = 'latest.json'
+const token: string = process.env.GITHUB_TOKEN || ''
 
 interface PlatformInfo {
   signature: string
@@ -23,16 +22,31 @@ interface Template {
   platforms: Record<string, PlatformInfo>
 }
 
-const FILE_URL =
-  'https://gitee.com/SuperWindcloud/rust_default_arg/raw/master/s3'
-
 async function fetchTemplate(): Promise<Template> {
-  const res = await axios.get(FILE_URL, { responseType: 'text' })
-  return JSON.parse(res.data) as Template
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
+  try {
+    const res = await axios.get(url, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3.raw',
+        'User-Agent': 'Axios-Client',
+      },
+    })
+    return res.data as Template
+  } catch (err) {
+    console.warn('❌ Fetching template failed, using default structure.')
+    return {
+      version: '0.0.0',
+      platforms: {
+        'windows-x86_64': { signature: '', url: '' },
+        'darwin-x86_64': { signature: '', url: '' },
+        'darwin-aarch64': { signature: '', url: '' },
+      },
+    }
+  }
 }
 
 const templateStr = await fetchTemplate()
-
 templateStr.version = pkg.version
 
 const signPath =
@@ -41,148 +55,130 @@ const signPath =
 
 console.log('Signing file ', signPath)
 const signContent = fs.readFileSync(signPath, 'utf-8')
+if (!templateStr.platforms['windows-x86_64']) {
+    templateStr.platforms['windows-x86_64'] = { signature: '', url: '' };
+}
 templateStr.platforms['windows-x86_64'].signature = signContent
 templateStr.platforms['windows-x86_64'].url =
-  `https://gitee.com/SuperWindcloud/rust_default_arg/releases/download/${pkg.version}/Interview-Coder_${pkg.version}_x64-setup.exe`
+  `https://github.com/${owner}/${repo}/releases/download/${pkg.version}/Interview-Coder_${pkg.version}_x64-setup.exe`
 
 console.log(templateStr)
 
 async function getFileInfo() {
-  const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/contents/${path}`
-  const { data } = await axios.get(url, {
-    params: token ? { access_token: token } : {},
-  })
-  return data.sha
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
+  try {
+    const { data } = await axios.get(url, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Axios-Client',
+      },
+    })
+    return data.sha
+  } catch (err) {
+    return null
+  }
 }
 
-async function updateS3File(newContent: string, sha: string) {
-  const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/contents/${path}`
+async function updateJsonFile(newContent: string, sha: string | null) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
   const message = 'publish new version'
   const encodedContent = Buffer.from(newContent, 'utf-8').toString('base64')
 
   const res = await axios.put(url, {
-    access_token: token,
-    content: encodedContent,
-    sha,
     message,
+    content: encodedContent,
+    sha: sha || undefined,
+  }, {
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Axios-Client',
+    },
   })
 
   return res.data
 }
 
-async function uploadAttach(releaseId: number, filePath: string) {
-  const formData = new FormData()
-  formData.append('file', fs.createReadStream(filePath))
+async function uploadAsset(uploadUrl: string, filePath: string, fileName: string) {
+  const base_url = uploadUrl.split('{')[0]
+  const url = `${base_url}?name=${fileName}`
+  const fileData = fs.readFileSync(filePath)
 
   try {
-    const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${releaseId}/attach_files`
-
-    await axios.post(url, formData, {
-      params: {
-        access_token: token,
+    await axios.post(url, fileData, {
+      headers: {
+        Authorization: `token ${token}`,
+        'Content-Type': 'application/octet-stream',
+        'User-Agent': 'Axios-Client',
       },
-      headers: formData.getHeaders(),
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
     })
-
-    console.log('✅ 上传成功!')
+    console.log(`✅ Asset ${fileName} 上传成功!`)
   } catch (err) {
-    console.error('❌ 上传失败:', err)
+    console.error(`❌ Asset ${fileName} 上传失败:`, err)
   }
 }
 
-interface AttachFile {
-  id: number
-  name: string
-  size: number
-  browser_download_url: string
-  download_count: number
-  created_at: string
-  updated_at: string
-}
-
-async function getReleaseAttachFilesAndDeleteExisted(
-  releaseId: number,
-): Promise<AttachFile[]> {
-  const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${releaseId}/attach_files`
-
+async function getOrCreateRelease() {
+  const releasesUrl = `https://api.github.com/repos/${owner}/${repo}/releases`
   try {
-    const response = await axios.get<AttachFile[]>(url, {
-      params: {
-        access_token: token,
+    // Try to get existing release
+    const tagUrl = `${releasesUrl}/tags/${pkg.version}`
+    const { data: existingRelease } = await axios.get(tagUrl, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Axios-Client',
       },
     })
-
-    const data = response.data
-    const existFiles = data.filter((item) =>
-      item.name.includes(`Interview-Coder_${pkg.version}_x64-setup.exe`),
-    )
-
-    if (existFiles.length > 0) {
-      console.log('❌ 已存在 Interview-Coder.app.tar.gz，删除...')
-      for (const file of existFiles) {
-        await axios.delete(
-          `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${releaseId}/attach_files/${file.id}`,
-          {
-            params: {
-              access_token: token,
-            },
-          },
-        )
-      }
-    }
-
-    return data
-  } catch (error) {
-    console.error('获取附件列表失败:', error)
-    throw error
+    return existingRelease
+  } catch (err) {
+    // Create new release
+    const res = await axios.post(releasesUrl, {
+      tag_name: pkg.version,
+      name: pkg.version,
+      body: 'enjoy it!',
+      draft: false,
+      prerelease: false,
+    }, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Axios-Client',
+      },
+    })
+    return res.data
   }
 }
 
-async function uploadAttachInstallerAndCreateRelease() {
-  const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases`
-
-  try {
-    const res = await axios.post(
-      url,
-      {
-        access_token: token,
-        tag_name: pkg.version,
-        name: pkg.version,
-        body: 'enjoy it!',
-        target_commitish: 'master',
+async function deleteExistingAsset(release: any, fileName: string) {
+  const asset = release.assets.find((a: any) => a.name === fileName)
+  if (asset) {
+    console.log(`❌ 已存在 ${fileName}，删除...`)
+    const url = `https://api.github.com/repos/${owner}/${repo}/releases/assets/${asset.id}`
+    await axios.delete(url, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'User-Agent': 'Axios-Client',
       },
-      {
-        headers: { 'Content-Type': 'application/json' },
-      },
-    )
-
-    console.log('✅ Release 创建成功：', res.data.name)
-  } catch (error: unknown) {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-expect-error
-    console.error('❌ 创建失败：', error.response?.data || error.message)
+    })
   }
-
-  const latestUrl = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/latest`
-  const res = await axios.get(latestUrl, {
-    params: token ? { access_token: token } : {},
-  })
-  const releaseId = res.data.id
-  console.log(releaseId)
-  await getReleaseAttachFilesAndDeleteExisted(releaseId)
-  await uploadAttach(
-    releaseId,
-    process.cwd() + `/bundle/nsis/Interview-Coder_${pkg.version}_x64-setup.exe`,
-  )
 }
 
 ;(async () => {
   const sha = await getFileInfo()
-  console.log(sha)
   const json = JSON.stringify(templateStr, null, 2)
-  console.log(json)
-  await updateS3File(json, sha)
-  await uploadAttachInstallerAndCreateRelease()
+  await updateJsonFile(json, sha)
+  
+  const release = await getOrCreateRelease()
+  const fileName = `Interview-Coder_${pkg.version}_x64-setup.exe`
+  await deleteExistingAsset(release, fileName)
+  await uploadAsset(
+    release.upload_url,
+    process.cwd() + `/bundle/nsis/${fileName}`,
+    fileName
+  )
 })()

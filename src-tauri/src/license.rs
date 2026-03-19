@@ -240,20 +240,20 @@ pub fn prepare_activation_repository(
     }
 
     let owner = env::var("ACTIVATION_REMOTE_OWNER")
-        .or_else(|_| env::var("GITEE_OWNER"))
-        .unwrap_or_else(|_| "SuperWindcloud".to_string());
+        .or_else(|_| env::var("GITHUB_OWNER"))
+        .unwrap_or_else(|_| "Super1Windcloud".to_string());
     let repo = env::var("ACTIVATION_REMOTE_REPO")
-        .or_else(|_| env::var("GITEE_REPO"))
-        .unwrap_or_else(|_| "rust_default_arg".to_string());
+        .or_else(|_| env::var("GITHUB_REPO"))
+        .unwrap_or_else(|_| "automatic-coder".to_string());
     let tag = env::var("ACTIVATION_REMOTE_TAG")
-        .or_else(|_| env::var("GITEE_RELEASE_TAG"))
-        .unwrap_or_else(|_| "0.1.0".to_string());
+        .or_else(|_| env::var("GITHUB_RELEASE_TAG"))
+        .unwrap_or_else(|_| "v1.0.0".to_string());
     let token = env::var("ACTIVATION_REMOTE_TOKEN")
-        .or_else(|_| env::var("GITEE_TOKEN"))
-        .unwrap_or_else(|_| "ca4ea3ee8f000c59976334bd5455eda3".to_string());
+        .or_else(|_| env::var("GITHUB_TOKEN"))
+        .unwrap_or_default();
 
     if token.trim().is_empty() {
-        println!("activation system disabled: missing GITEE_TOKEN/ACTIVATION_REMOTE_TOKEN");
+        println!("activation system disabled: missing GITHUB_TOKEN/ACTIVATION_REMOTE_TOKEN");
         return Ok(None);
     }
 
@@ -476,7 +476,7 @@ impl From<std::io::Error> for ActivationFlowError {
     }
 }
 
-const GITEE_API_BASE: &str = "https://gitee.com/api/v5";
+const GITHUB_API_BASE: &str = "https://api.github.com";
 
 struct RemoteActivationLock {
     config: RemoteActivationConfig,
@@ -484,6 +484,7 @@ struct RemoteActivationLock {
     release_id: u64,
     asset_id: u64,
     file_name: String,
+    upload_url: String,
     file: NamedTempFile,
 }
 
@@ -495,7 +496,7 @@ impl RemoteActivationLock {
         write_some_log("acquiring remote activation payload");
         let release = fetch_release_by_tag(&client, &config).await?;
         let asset = fetch_activation_asset(&client, &config, release.id).await?;
-        let payload = download_activation_payload(&client, &config, release.id, asset.id).await?;
+        let payload = download_activation_payload(&client, &config, asset.id).await?;
         let mut file = NamedTempFile::new()?;
         file.write_all(&payload)?;
         Ok(Self {
@@ -504,6 +505,7 @@ impl RemoteActivationLock {
             release_id: release.id,
             asset_id: asset.id,
             file_name: asset.name,
+            upload_url: release.upload_url,
             file,
         })
     }
@@ -517,25 +519,27 @@ impl RemoteActivationLock {
         let RemoteActivationLock {
             config,
             client,
-            release_id,
+            release_id: _,
             asset_id,
             file_name,
+            upload_url,
             file,
         } = self;
 
-        delete_activation_asset(&client, &config, release_id, asset_id).await?;
+        delete_activation_asset(&client, &config, asset_id).await?;
         let path = file.path().to_path_buf();
-        upload_activation_payload(&client, &config, release_id, &file_name, &path).await
+        upload_activation_payload(&client, &config, &upload_url, &file_name, &path).await
     }
 }
 
 #[derive(Debug, Deserialize)]
-struct GiteeRelease {
+struct GithubRelease {
     id: u64,
+    upload_url: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct GiteeAttachFile {
+struct GithubAsset {
     id: u64,
     name: String,
 }
@@ -543,15 +547,16 @@ struct GiteeAttachFile {
 async fn fetch_release_by_tag(
     client: &Client,
     config: &RemoteActivationConfig,
-) -> Result<GiteeRelease, ActivationFlowError> {
+) -> Result<GithubRelease, ActivationFlowError> {
     let url = format!(
-        "{GITEE_API_BASE}/repos/{}/{}/releases/tags/{}",
+        "{GITHUB_API_BASE}/repos/{}/{}/releases/tags/{}",
         config.owner, config.repo, config.tag
     );
     let response = client
         .get(url)
-        .query(&[("access_token", config.token.as_str())])
-        .header("Accept", "application/json")
+        .header("Authorization", format!("token {}", config.token))
+        .header("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", "InterviewCoder")
         .send()
         .await?;
     if !response.status().is_success() {
@@ -561,63 +566,64 @@ async fn fetch_release_by_tag(
             "failed to fetch release ({status}): {body}"
         )));
     }
-    response.json::<GiteeRelease>().await.map_err(Into::into)
+    response.json::<GithubRelease>().await.map_err(Into::into)
 }
 
 async fn fetch_activation_asset(
     client: &Client,
     config: &RemoteActivationConfig,
     release_id: u64,
-) -> Result<GiteeAttachFile, ActivationFlowError> {
+) -> Result<GithubAsset, ActivationFlowError> {
     let url = format!(
-        "{GITEE_API_BASE}/repos/{}/{}/releases/{release_id}/attach_files",
+        "{GITHUB_API_BASE}/repos/{}/{}/releases/{release_id}/assets",
         config.owner, config.repo
     );
     let response = client
         .get(url)
-        .query(&[("access_token", config.token.as_str())])
-        .header("Accept", "application/json")
+        .header("Authorization", format!("token {}", config.token))
+        .header("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", "InterviewCoder")
         .send()
         .await?;
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         return Err(ActivationFlowError::Remote(format!(
-            "failed to list release attachments ({status}): {body}"
+            "failed to list release assets ({status}): {body}"
         )));
     }
-    let files = response.json::<Vec<GiteeAttachFile>>().await?;
-    if files.is_empty() {
+    let assets = response.json::<Vec<GithubAsset>>().await?;
+    if assets.is_empty() {
         return Err(ActivationFlowError::Remote(
             "no activation payload available on remote release".into(),
         ));
     }
 
-    if let Some(found) = files
+    if let Some(found) = assets
         .iter()
-        .find(|file| file.name == REMOTE_ACTIVATION_FILE)
+        .find(|asset| asset.name == REMOTE_ACTIVATION_FILE)
         .cloned()
     {
         return Ok(found);
     }
 
-    Ok(files[0].clone())
+    Ok(assets[0].clone())
 }
 
 async fn download_activation_payload(
     client: &Client,
     config: &RemoteActivationConfig,
-    release_id: u64,
     asset_id: u64,
 ) -> Result<Vec<u8>, ActivationFlowError> {
     let url = format!(
-        "{GITEE_API_BASE}/repos/{}/{}/releases/{release_id}/attach_files/{asset_id}/download",
+        "{GITHUB_API_BASE}/repos/{}/{}/releases/assets/{asset_id}",
         config.owner, config.repo
     );
     let response = client
         .get(url)
-        .query(&[("access_token", config.token.as_str())])
+        .header("Authorization", format!("token {}", config.token))
         .header("Accept", "application/octet-stream")
+        .header("User-Agent", "InterviewCoder")
         .send()
         .await?;
     if !response.status().is_success() {
@@ -633,17 +639,17 @@ async fn download_activation_payload(
 async fn delete_activation_asset(
     client: &Client,
     config: &RemoteActivationConfig,
-    release_id: u64,
     asset_id: u64,
 ) -> Result<(), ActivationFlowError> {
     let url = format!(
-        "{GITEE_API_BASE}/repos/{}/{}/releases/{release_id}/attach_files/{asset_id}",
+        "{GITHUB_API_BASE}/repos/{}/{}/releases/assets/{asset_id}",
         config.owner, config.repo
     );
     let response = client
         .delete(url)
-        .query(&[("access_token", config.token.as_str())])
-        .header("Accept", "application/json")
+        .header("Authorization", format!("token {}", config.token))
+        .header("Accept", "application/vnd.github.v3+json")
+        .header("User-Agent", "InterviewCoder")
         .send()
         .await?;
     if !response.status().is_success() {
@@ -659,21 +665,21 @@ async fn delete_activation_asset(
 async fn upload_activation_payload(
     client: &Client,
     config: &RemoteActivationConfig,
-    release_id: u64,
+    upload_url: &str,
     file_name: &str,
     path: &Path,
 ) -> Result<(), ActivationFlowError> {
-    let url = format!(
-        "{GITEE_API_BASE}/repos/{}/{}/releases/{release_id}/attach_files",
-        config.owner, config.repo
-    );
+    // upload_url is usually like "https://uploads.github.com/repos/owner/repo/releases/id/assets{?name,label}"
+    let base_url = upload_url.split('{').next().unwrap();
+    let url = format!("{}?name={}", base_url, file_name);
+
     let bytes = fs::read(path)?;
-    let part = multipart::Part::bytes(bytes).file_name(file_name.to_string());
-    let form = multipart::Form::new().part("file", part);
     let response = client
         .post(url)
-        .query(&[("access_token", config.token.as_str())])
-        .multipart(form)
+        .header("Authorization", format!("token {}", config.token))
+        .header("Content-Type", "application/octet-stream")
+        .header("User-Agent", "InterviewCoder")
+        .body(bytes)
         .send()
         .await?;
     if !response.status().is_success() {

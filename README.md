@@ -1,6 +1,3 @@
-# Interview-coder
-次世代程序员笔试助手
-
 ## 激活管理
 
 应用在启动前会检查本地激活状态并要求输入加密激活码。后端会从远端仓库下载最新的 `activation_codes.enc`，完成解密与匹配后立即上传更新后的文件，同时只在本机落地一次性指纹。
@@ -8,7 +5,7 @@
 ### 环境变量
 
 - 在 `src-tauri/.env` 或系统环境中设置 `ACTIVATION_MASTER_KEY`，必须是 32 字节密钥，可使用 Base64、Hex 或原始 32 个字符。
-- 远端存储使用 Gitee 发布附件，可通过以下变量自定义，未设置时会使用默认值：
+- 远端存储使用 Github 发布附件，可通过以下变量自定义，未设置时会使用默认值：
   - `ACTIVATION_REMOTE_OWNER`（默认 `SuperWindcloud`）
   - `ACTIVATION_REMOTE_REPO`（默认 `rust_default_arg`）
   - `ACTIVATION_REMOTE_TAG`（默认 `0.1.0`）
@@ -39,4 +36,3 @@
 激活指纹会写入三个位置，且三者同时存在才视为激活成功：系统“文档”目录、Local AppData（或等效目录）、Roaming AppData（或等效目录）。每个位置都会创建一个以 64 位指纹哈希命名的文件夹，并放置 `activation_status_fingerprint` 文件，便于与常规应用数据区分。
 
 如需重置激活状态，可删除系统“文档”目录下以 64 位指纹命名的子目录中的 `activation_status_fingerprint` 文件，然后重新分发新的远端激活文件。
-

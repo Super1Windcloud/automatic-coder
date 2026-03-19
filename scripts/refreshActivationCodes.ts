@@ -22,48 +22,31 @@ const runtimeEnv: EnvBag = (() => {
 
 const owner =
   runtimeEnv.ACTIVATION_REMOTE_OWNER ||
-  runtimeEnv.GITEE_OWNER ||
-  'SuperWindcloud'
+  runtimeEnv.GITHUB_OWNER ||
+  'Super1Windcloud'
 const repo =
   runtimeEnv.ACTIVATION_REMOTE_REPO ||
-  runtimeEnv.GITEE_REPO ||
-  'rust_default_arg'
+  runtimeEnv.GITHUB_REPO ||
+  'automatic-coder'
 const tag =
-  runtimeEnv.ACTIVATION_REMOTE_TAG || runtimeEnv.GITEE_RELEASE_TAG || '0.1.0'
+  runtimeEnv.ACTIVATION_REMOTE_TAG || runtimeEnv.GITHUB_RELEASE_TAG || 'v1.0.0'
 const token =
   runtimeEnv.ACTIVATION_REMOTE_TOKEN ||
-  runtimeEnv.GITEE_TOKEN ||
-  'ca4ea3ee8f000c59976334bd5455eda3'
+  runtimeEnv.GITHUB_TOKEN ||
+  ''
 
 // 定义响应类型
-interface GiteeAuthor {
+interface GithubAsset {
   id: number
-  name: string
-  email: string
-  avatar_url?: string
-}
-
-interface GiteeAsset {
   name: string
   browser_download_url: string
 }
 
-interface GiteeRelease {
+interface GithubRelease {
   id: number
   tag_name: string
-  name: string
-  body: string
-  created_at: string
-  prerelease: boolean
-  target_commitish: string
-  author: GiteeAuthor
-  assets: GiteeAsset[]
-}
-interface AttachFile {
-  name: string
-  id: string
-  size: number
-  browser_download_url: string
+  upload_url: string
+  assets: GithubAsset[]
 }
 
 /**
@@ -71,22 +54,20 @@ interface AttachFile {
  * @param owner 仓库所属空间
  * @param repo 仓库名
  * @param tag 标签名
- * @param accessToken Gitee 授权码
+ * @param accessToken GitHub 授权码
  */
-export async function getGiteeReleaseByTag(
+export async function getGithubReleaseByTag(
   owner: string,
   repo: string,
   tag: string,
   accessToken: string,
-): Promise<GiteeRelease> {
-  const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/tags/${tag}`
+): Promise<GithubRelease> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`
 
-  const res = await axios.get<GiteeRelease>(url, {
-    params: {
-      access_token: accessToken,
-    },
+  const res = await axios.get<GithubRelease>(url, {
     headers: {
-      Accept: 'application/json',
+      Authorization: `token ${accessToken}`,
+      Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'Axios-Client',
     },
     timeout: 30000,
@@ -95,48 +76,40 @@ export async function getGiteeReleaseByTag(
   return res.data
 }
 
-export async function getGiteeReleaseID() {
+export async function getGithubReleaseID() {
   try {
-    const release = await getGiteeReleaseByTag(owner, repo, tag, token)
+    const release = await getGithubReleaseByTag(owner, repo, tag, token)
     return release.id
   } catch (err: unknown) {
     console.error('❌ 请求出错:', err)
   }
 }
 
-async function getGiteeReleaseInfoByID() {
-  const id = await getGiteeReleaseID()
-  if (id) {
-    const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${id}/attach_files`
-
-    const res = await axios.get<AttachFile[]>(url, {
-      params: {
-        access_token: token,
-      },
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'Axios-Client',
-      },
-      timeout: 30000,
-    })
-
-    const data = res.data[0]
-    // console.log(data);
-    return {
-      name: data.name,
-      id: data.id,
-      url: data.browser_download_url,
-      releaseId: id.toString(),
+async function getGithubReleaseInfoByTag() {
+  try {
+    const release = await getGithubReleaseByTag(owner, repo, tag, token)
+    if (release.assets.length > 0) {
+      const data = release.assets[0] // 默认取第一个，或者根据名字找
+      const activationAsset = release.assets.find(a => a.name === 'activation_codes.enc') || data
+      return {
+        name: activationAsset.name,
+        id: activationAsset.id,
+        url: activationAsset.browser_download_url,
+        releaseId: release.id.toString(),
+        uploadUrl: release.upload_url,
+      }
     }
+  } catch (err) {
+    console.error('❌ 获取 Release 信息失败:', err)
   }
 }
-async function deleteAttachFile(deleteUrl: string) {
-  await axios.delete(deleteUrl, {
-    params: {
-      access_token: token,
-    },
+
+async function deleteAsset(assetId: number) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/releases/assets/${assetId}`
+  await axios.delete(url, {
     headers: {
-      Accept: 'application/json',
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json',
       'User-Agent': 'Axios-Client',
     },
     timeout: 30000,
@@ -159,49 +132,52 @@ async function waitForEnter(promptMsg = '请按 Enter 键继续上传...') {
 }
 
 export async function downloadActivateCodeFileAndDeleteAttach() {
-  const data = await getGiteeReleaseInfoByID()
-  const deleteUrl = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${data!.releaseId}/attach_files/${data!.id}`
-  const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${data!.releaseId}/attach_files/${data!.id}/download`
-  console.log(url)
+  const data = await getGithubReleaseInfoByTag()
+  if (!data) return
+
+  const url = `https://api.github.com/repos/${owner}/${repo}/releases/assets/${data.id}`
+  console.log(`正在下载: ${url}`)
+  
   try {
     const res = await axios.get(url, {
-      params: { access_token: token },
       headers: {
+        Authorization: `token ${token}`,
         Accept: 'application/octet-stream',
         'User-Agent': 'Axios-Client',
       },
-      responseType: 'arraybuffer', // ✅ 关键点：下载二进制流
+      responseType: 'arraybuffer',
       timeout: 20000,
     })
 
-    const filePath = `./${data!.name || 'download.bin'}`
+    const filePath = `./${data.name || 'download.bin'}`
     fs.writeFileSync(filePath, res.data)
 
     console.log(`✅ 文件下载成功：${filePath}`)
 
-    await deleteAttachFile(deleteUrl)
+    await deleteAsset(data.id)
     await waitForEnter()
-    return { data: res.data, filePath, releaseId: data!.releaseId }
+    return { data: res.data, filePath, releaseId: data.releaseId, uploadUrl: data.uploadUrl }
   } catch (err) {
     console.error('❌ 下载失败:', err)
   }
 }
 
-export async function updateActicationCodeFile(
-  releaseId: number,
+export async function updateActivationCodeFile(
+  uploadUrl: string,
   filePath: string,
+  fileName: string,
 ) {
-  const formData = new FormData()
-  formData.append('file', fs.createReadStream(filePath))
+  const base_url = uploadUrl.split('{')[0]
+  const url = `${base_url}?name=${fileName}`
+  const fileData = fs.readFileSync(filePath)
 
   try {
-    const url = `https://gitee.com/api/v5/repos/${owner}/${repo}/releases/${releaseId}/attach_files`
-
-    await axios.post(url, formData, {
-      params: {
-        access_token: token,
+    await axios.post(url, fileData, {
+      headers: {
+        Authorization: `token ${token}`,
+        'Content-Type': 'application/octet-stream',
+        'User-Agent': 'Axios-Client',
       },
-      headers: formData.getHeaders(),
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
     })

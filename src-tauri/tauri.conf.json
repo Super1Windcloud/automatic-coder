@@ -58,7 +58,7 @@
       },
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0QzAzRDA5QjIyM0I0OUIKUldTYnRDT3lDVDNBUkxFbFlkQmZqQzhEZEVKYTBPZ0ZMbW1Hd3hZNU9GazVXK1VCWi9Ba1hpem8K",
       "endpoints": [
-        "https://gitee.com/SuperWindcloud/rust_default_arg/raw/master/s3"
+        "https://github.com/Super1Windcloud/automatic-coder/releases/latest/download/latest.json"
       ]
     }
   }
