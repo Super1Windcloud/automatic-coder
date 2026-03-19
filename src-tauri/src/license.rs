@@ -226,16 +226,24 @@ pub async fn submit_activation_code(
 }
 
 pub fn prepare_activation_repository(
-    _app_handle: &AppHandle,
+    app_handle: &AppHandle,
 ) -> Result<Option<ActivationBootstrap>, LicenseError> {
     hydrate_activation_env();
     let Some(key) = env::var("ACTIVATION_MASTER_KEY").ok() else {
-        println!("activation system disabled: missing ACTIVATION_MASTER_KEY");
+        if is_dev() {
+            println!("activation system disabled: missing ACTIVATION_MASTER_KEY");
+        } else {
+            write_some_log("activation system disabled: missing ACTIVATION_MASTER_KEY");
+        }
         return Ok(None);
     };
 
     if key.trim().is_empty() {
-        println!("activation system disabled: empty ACTIVATION_MASTER_KEY");
+        if is_dev() {
+            println!("activation system disabled: empty ACTIVATION_MASTER_KEY");
+        } else {
+            write_some_log("activation system disabled: empty ACTIVATION_MASTER_KEY");
+        }
         return Ok(None);
     }
 
@@ -247,13 +255,17 @@ pub fn prepare_activation_repository(
         .unwrap_or_else(|_| "automatic-coder".to_string());
     let tag = env::var("ACTIVATION_REMOTE_TAG")
         .or_else(|_| env::var("GITHUB_RELEASE_TAG"))
-        .unwrap_or_else(|_| "v1.0.0".to_string());
+        .unwrap_or_else(|_| app_handle.package_info().version.to_string());
     let token = env::var("ACTIVATION_REMOTE_TOKEN")
         .or_else(|_| env::var("GITHUB_TOKEN"))
         .unwrap_or_default();
 
     if token.trim().is_empty() {
-        println!("activation system disabled: missing GITHUB_TOKEN/ACTIVATION_REMOTE_TOKEN");
+        if is_dev() {
+            println!("activation system disabled: missing GITHUB_TOKEN/ACTIVATION_REMOTE_TOKEN");
+        } else {
+            write_some_log("activation system disabled: missing GITHUB_TOKEN/ACTIVATION_REMOTE_TOKEN");
+        }
         return Ok(None);
     }
 

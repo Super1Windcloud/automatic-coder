@@ -107,15 +107,27 @@ fn check_activation_status(app: &mut App<Wry>) {
                 }
                 Ok(None) => {
                     state.disable();
-                    println!(
-                        "activation repository unavailable; continuing without activation gate"
-                    );
+                    if is_dev() {
+                        println!(
+                            "activation repository unavailable; continuing without activation gate"
+                        );
+                    } else {
+                        write_some_log(
+                            "activation repository unavailable; continuing without activation gate",
+                        );
+                    }
                     register_activation_shortcut(app.handle());
                     // show_main_window_now(app.handle());
                 }
                 Err(err) => {
                     state.disable();
-                    println!("activation repository initialisation failed: {err}");
+                    if is_dev() {
+                        println!("activation repository initialisation failed: {err}");
+                    } else {
+                        write_some_log(
+                            format!("activation repository initialisation failed: {err}").as_str(),
+                        );
+                    }
                     register_activation_shortcut(app.handle());
                     // show_main_window_now(app.handle());
                 }
@@ -124,7 +136,11 @@ fn check_activation_status(app: &mut App<Wry>) {
         Err(err) => {
             let state: tauri::State<LicenseState> = app.state();
             state.disable();
-            println!("{err}");
+            if is_dev() {
+                println!("{err}");
+            } else {
+                write_some_log(format!("{err}").as_str());
+            }
             show_main_window_now(app.handle());
         }
     }
