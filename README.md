@@ -1,38 +1,96 @@
-## 激活管理
+# Automatic Coder
 
-应用在启动前会检查本地激活状态并要求输入加密激活码。后端会从远端仓库下载最新的 `activation_codes.enc`，完成解密与匹配后立即上传更新后的文件，同时只在本机落地一次性指纹。
+An intelligent desktop application for developers, featuring screen capture, AI-driven solutions, and a secure activation system.
 
-### 环境变量
+## 🚀 Features
 
-- 在 `src-tauri/.env` 或系统环境中设置 `ACTIVATION_MASTER_KEY`，必须是 32 字节密钥，可使用 Base64、Hex 或原始 32 个字符。
-- 远端存储使用 Github 发布附件，可通过以下变量自定义，未设置时会使用默认值：
-  - `ACTIVATION_REMOTE_OWNER`（默认 `SuperWindcloud`）
-  - `ACTIVATION_REMOTE_REPO`（默认 `rust_default_arg`）
-  - `ACTIVATION_REMOTE_TAG`（默认 `0.1.0`）
-  - `ACTIVATION_REMOTE_TOKEN` 或 `GITEE_TOKEN`：访问令牌，缺省时仅用于开发。
+- **Screen Capture**: Easily capture snippets of your screen for analysis.
+- **AI Solutions**: Integrated with VLM (Vision Language Models) to provide real-time coding assistance and problem-solving.
+- **Secure Activation**: Robust licensing system hosted on GitHub to manage application access.
+- **Auto-Updates**: Seamless background updates powered by Tauri and GitHub Releases.
 
-### 生成激活码
+## 🔑 License Management
 
-1. 进入 `src-tauri` 目录，为密钥生成 10,000 个激活码并写入资产目录：
+The application validates the local activation status upon startup. If not activated, it requires an encrypted activation code. The backend fetches the latest `activation_codes.enc` from the remote GitHub repository, decrypts and matches the code, and then uploads the updated file while persisting a one-time machine fingerprint locally.
+
+### Generating Activation Codes
+
+1. Navigate to the `src-tauri` directory and generate activation codes (e.g., 10,000 codes) for your master key:
 
    ```bash
-   cargo run -p license_manager --bin generate -- assets "<ACTIVATION_MASTER_KEY>" 10000 16
+   cargo run -p license_manager --bin generate -- assets "<YOUR_ACTIVATION_MASTER_KEY>" 10000 16
    ```
 
-2. 生成的文件说明：
-   - `assets/activation_codes.json`：原始激活码（可自行妥善保管或删除）。
-   - `assets/activation_codes.enc`：需要上传到远端仓库的加密激活文件。
-   - `assets/activation_codes_client.txt`：分发给用户的加密激活码，一行一个。
+2. Generated Files:
+   - `assets/activation_codes.json`: Raw activation codes (keep secure or delete after use).
+   - `assets/activation_codes.enc`: Encrypted activation file to be uploaded to the GitHub Release assets.
+   - `assets/activation_codes_client.txt`: Encrypted codes to be distributed to users (one per line).
 
-3. 每次更新激活码后，使用 `scripts/refreshActivationCodes.ts` 中的 `downloadActivateCodeFileAndDeleteAttach` 与 `updateActicationCodeFile` 对发布附件进行下载、消费和回传，确保远端文件永远只有一份最新内容。
+3. **Remote Sync**: Use the scripts in `scripts/refreshActivationCodes.ts` (specifically `downloadActivateCodeFileAndDeleteAttach` and `updateActivationCodeFile`) to download, consume, and re-upload the activation file to GitHub, ensuring only the latest version exists remotely.
 
-### 使用流程
+### Activation Workflow
 
-1. 前端弹窗要求用户粘贴加密激活码。
-2. 后端拉取远端加密存储并解密，与可用列表匹配。
-3. 匹配成功后将激活码从远端存储中移除，上传更新后的 `activation_codes.enc`，并在本机写入激活标记。
-4. 激活失败会给出对应提示（无效、已使用或系统未启用）。
+1. **User Input**: A prompt appears asking for the encrypted activation code.
+2. **Remote Verification**: The backend pulls the encrypted store from GitHub, decrypts it, and checks against the provided code.
+3. **Consumption**: Upon a successful match, the code is removed from the remote store, the updated `activation_codes.enc` is re-uploaded, and an activation flag is written locally.
+4. **Feedback**: Clear status messages are provided (Invalid, Already Used, or System Disabled).
 
-激活指纹会写入三个位置，且三者同时存在才视为激活成功：系统“文档”目录、Local AppData（或等效目录）、Roaming AppData（或等效目录）。每个位置都会创建一个以 64 位指纹哈希命名的文件夹，并放置 `activation_status_fingerprint` 文件，便于与常规应用数据区分。
+### Machine Fingerprinting
 
-如需重置激活状态，可删除系统“文档”目录下以 64 位指纹命名的子目录中的 `activation_status_fingerprint` 文件，然后重新分发新的远端激活文件。
+The activation fingerprint is stored in three distinct locations. Activation is only considered valid if all three exist:
+
+- System "Documents" directory.
+- Local AppData (or platform equivalent).
+- Roaming AppData (or platform equivalent).
+
+Each location contains a folder named after a 64-bit fingerprint hash containing an `activation_status_fingerprint` file.
+
+**To Reset Activation**: Delete the `activation_status_fingerprint` file within the hashed subdirectory in the "Documents" folder, then re-distribute a fresh remote activation file.
+
+## 🛠 Development
+
+### Prerequisites
+
+- [Rust](https://www.rust-lang.org/)
+- [Node.js](https://nodejs.org/) (pnpm recommended)
+- [Tauri CLI](https://tauri.app/v1/guides/getting-started/setup/)
+
+### Setup
+
+1. Install dependencies:
+
+   ```bash
+   pnpm install
+   ```
+
+2. Configure environment variables in `src-tauri/.env`:
+
+   ```env
+   ACTIVATION_MASTER_KEY=your_key
+   GITHUB_TOKEN=your_github_pat
+   GITHUB_OWNER=Super1Windcloud
+   GITHUB_REPO=automatic-coder
+   GITHUB_RELEASE_TAG=v1.0.0
+   ```
+
+3. Run in development mode:
+   ```bash
+   pnpm tauri dev
+   ```
+
+## 📦 Publishing
+
+Use the provided scripts to publish new versions to GitHub:
+
+- **Windows**: `pnpm tsx scripts/publish_windows.ts`
+- **macOS**: `pnpm tsx scripts/publish_macos.ts`
+
+These scripts will:
+
+1. Update `latest.json` with the new version and signatures.
+2. Create/Update a GitHub Release.
+3. Upload the installer artifacts and signatures as release assets.
+
+## 📄 License
+
+This project is licensed under the [LICENSE](LICENSE) file.
