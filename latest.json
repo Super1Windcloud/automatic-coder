@@ -1,0 +1,17 @@
+{
+  "version": "1.0.7",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUlBiZC80eUhlekY2YkZSUVpOeko2TGlsRnlsOW1JYXVPNWtYM0xZOGl5Rlkrbnd4ZHJCUGNhODJPTmZ4WFBCQzk1UUVpQjBnN0d5NEJFMDB1cU1qMGdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzczODk5ODE4CWZpbGU6SW50ZXJ2aWV3LUNvZGVyXzEuMC43X3g2NC1zZXR1cC5leGUKSkZkYTI3QnJCOWRjcTlyRFFMM3BWckw0d1MreUxkUjJ5UzA1MnRxZEJJa0ZJOGRGS3B0dVB1Z1dNdGt4UHRsZVJpQ3BTcGdWMHBHY2ZxRHplWGdyQmc9PQo=",
+      "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.7/Interview-Coder_1.0.7_x64-setup.exe"
+    },
+    "darwin-x86_64": {
+      "signature": "",
+      "url": ""
+    },
+    "darwin-aarch64": {
+      "signature": "",
+      "url": ""
+    }
+  }
+}
