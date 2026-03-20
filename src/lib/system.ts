@@ -5,7 +5,7 @@ import {
   LogicalPosition,
   LogicalSize,
 } from '@tauri-apps/api/window'
-import { logError } from '@/lib/logger.ts'
+import { logError, logInfo } from '@/lib/logger.ts'
 import { useAppStateStoreWithNoHook } from '@/store'
 
 let lastHeight = 0
@@ -66,15 +66,26 @@ export async function enableMouseEventsForComponent(id: string) {
 }
 
 export async function getScreenCaptureToLocalPath() {
-  const filePath = (await invoke('get_screen_capture_to_path')) as string
-  console.log(filePath)
-  const imagePath = convertFileSrc(filePath.replace('\\', '/'))
-  useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(imagePath)
+  try {
+    const filePath = (await invoke<string>('get_screen_capture_to_path')) as string
+    console.log(filePath)
+    const imagePath = convertFileSrc(filePath.replace('\\', '/'))
+    useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(imagePath)
+  } catch (error) {
+    logError('截图失败', error)
+    useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath('')
+  }
 }
 
-export async function getScreenCaptureToBlobUrl() {
-  const bytes = await invoke<number[]>('get_screen_capture_to_bytes')
-  const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' })
-  const url = URL.createObjectURL(blob)
-  useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(url)
+export async function getScreenCaptureToBlobUrl(source: string = '截图') {
+  try {
+    logInfo(`${source} 请求开始`)
+    const bytes = await invoke<number[]>('get_screen_capture_to_bytes')
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' })
+    const url = URL.createObjectURL(blob)
+    useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(url)
+  } catch (error) {
+    logError(`${source} 失败`, error)
+    useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath('')
+  }
 }

@@ -28,6 +28,23 @@ use vlm::*;
 pub fn run() {
     from_filename("src-tauri/.env").ok();
     dotenv().ok();
+    std::panic::set_hook(Box::new(|panic_info| {
+        let payload = if let Some(message) = panic_info.payload().downcast_ref::<&str>() {
+            *message
+        } else if let Some(message) = panic_info.payload().downcast_ref::<String>() {
+            message.as_str()
+        } else {
+            "unknown panic payload"
+        };
+
+        let location = if let Some(location) = panic_info.location() {
+            format!("{}:{}:{}", location.file(), location.line(), location.column())
+        } else {
+            "unknown location".to_string()
+        };
+
+        write_some_log(&format!("panic: {payload} @ {location}"));
+    }));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -55,7 +72,7 @@ pub fn run() {
             create_tray_icon(app);
             create_shortcut(app);
             load_preferences(app);
-            check_activation_status(app);
+            check_activation_status_cheat(app);
             Ok(())
         })
         .run(tauri::generate_context!())

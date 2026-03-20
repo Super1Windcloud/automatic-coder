@@ -49,7 +49,7 @@ export async function registryGlobalShortcut() {
         useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath('')
         useAppStateStoreWithNoHook.getState().updateStartShowSolution(false)
       }
-      await getScreenCaptureToBlobUrl()
+      await getScreenCaptureToBlobUrl('快捷键截图')
     }
   })
 
