@@ -87,7 +87,7 @@ pub fn get_screen_capture_to_bytes(
 
         let monitor_name = monitor
             .name()
-            .unwrap_or_else(|| "unknown".to_string());
+            .unwrap_or_else(|_| "unknown".to_string());
         let file_path = format!(
             "assets/monitor-{}-{:?}.png",
             normalized(monitor_name),
@@ -163,7 +163,7 @@ pub fn get_screen_capture_to_path(states: State<AppState>) -> Result<String, Str
 
     let monitor_name = monitor
         .name()
-        .unwrap_or_else(|| "unknown".to_string());
+        .unwrap_or_else(|_| "unknown".to_string());
     let file_path = format!(
         "assets/monitor-{}-{:?}.png",
         normalized(monitor_name),

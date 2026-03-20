@@ -38,7 +38,12 @@ pub fn run() {
         };
 
         let location = if let Some(location) = panic_info.location() {
-            format!("{}:{}:{}", location.file(), location.line(), location.column())
+            format!(
+                "{}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column()
+            )
         } else {
             "unknown location".to_string()
         };
@@ -72,13 +77,14 @@ pub fn run() {
             create_tray_icon(app);
             create_shortcut(app);
             load_preferences(app);
-            check_activation_status_cheat(app);
+            check_activation_status(app);
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
+#[allow(dead_code)]
 fn check_activation_status_cheat(app: &mut App<Wry>) {
     let state: tauri::State<LicenseState> = app.state();
 
