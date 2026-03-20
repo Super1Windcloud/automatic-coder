@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Interview-Coder",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "identifier": "com.superuse.interview-coder",
   "build": {
     "beforeDevCommand": "pnpm dev",
