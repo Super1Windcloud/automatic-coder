@@ -3,6 +3,7 @@
 use std::sync::Mutex;
 use tauri::{App, AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
+use crate::{app_info, app_warn};
 use crate::utils::is_dev;
 use confy::load as load_config;
 use serde::{Deserialize, Serialize};
@@ -70,7 +71,7 @@ pub fn load_preferences(app: &mut App) {
             *state.prompt.lock().unwrap() = preferences.prompt;
         }
     } else {
-        println!("Failed to load preferences");
+        app_warn!("config", "failed to load preferences");
         open_language_selector(app.handle())
     }
 }
@@ -138,7 +139,8 @@ pub fn set_capture_position(state: State<AppState>, position: String) {
         _ => DirectionEnum::LeftHalf,
     };
     *state.capture_position.lock().unwrap() = position;
-    println!(
+    app_info!(
+        "config",
         "current capture position: {:?}",
         state.capture_position.lock().unwrap()
     );
@@ -154,7 +156,7 @@ pub fn set_selected_language_prompt(state: State<AppState>, window: tauri::Windo
     let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences").unwrap();
     cfg.prompt = prompt;
     confy::store("interview-coder-config", "preferences", cfg).unwrap();
-    println!("current prompt: {}", state.prompt.lock().unwrap());
+    app_info!("config", "current prompt updated");
     if let Some(window) = window.get_webview_window("code_language_selector") {
         window.hide().unwrap();
         window.close().unwrap();
@@ -213,5 +215,5 @@ fn output_config_path() {
     use confy::get_configuration_file_path;
 
     let result = get_configuration_file_path("interview-coder-config", "preferences").unwrap();
-    println!("Config path: {}", result.to_str().unwrap());
+    app_info!("config", "config path: {}", result.to_str().unwrap());
 }

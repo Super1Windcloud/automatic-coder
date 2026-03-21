@@ -5,10 +5,11 @@ import {
   LogicalPosition,
   LogicalSize,
 } from '@tauri-apps/api/window'
-import { logError, logInfo } from '@/lib/logger.ts'
+import { createScopedLogger } from '@/lib/logger.ts'
 import { useAppStateStoreWithNoHook } from '@/store'
 
 let lastHeight = 0
+const logger = createScopedLogger('system')
 
 export async function resetWindow(offsetCallback: () => void) {
   await getCurrentWindow().setSize(new LogicalSize(800, 50))
@@ -38,7 +39,7 @@ async function resolveWindow(label?: string) {
       return win
     }
   } catch (error) {
-    logError(`查找窗口 ${label ?? 'unknown'} 失败`, error)
+    logger.error(`查找窗口 ${label ?? 'unknown'} 失败`, error)
   }
   return null
 }
@@ -68,24 +69,23 @@ export async function enableMouseEventsForComponent(id: string) {
 export async function getScreenCaptureToLocalPath() {
   try {
     const filePath = (await invoke<string>('get_screen_capture_to_path')) as string
-    console.log(filePath)
     const imagePath = convertFileSrc(filePath.replace('\\', '/'))
     useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(imagePath)
   } catch (error) {
-    logError('截图失败', error)
+    logger.error('截图失败', error)
     useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath('')
   }
 }
 
 export async function getScreenCaptureToBlobUrl(source: string = '截图') {
   try {
-    logInfo(`${source} 请求开始`)
+    logger.info(`${source} 请求开始`)
     const bytes = await invoke<number[]>('get_screen_capture_to_bytes')
     const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' })
     const url = URL.createObjectURL(blob)
     useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(url)
   } catch (error) {
-    logError(`${source} 失败`, error)
+    logger.error(`${source} 失败`, error)
     useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath('')
   }
 }

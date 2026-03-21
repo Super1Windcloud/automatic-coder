@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { logError } from '@/lib/logger.ts'
+import { createScopedLogger } from '@/lib/logger.ts'
 
 type ActivationAttemptPayload = {
   success: boolean
@@ -18,6 +18,7 @@ const statusBox = document.getElementById(
   'activation-status',
 ) as HTMLDivElement | null
 const submitButton = document.querySelector<HTMLButtonElement>('button.submit')
+const logger = createScopedLogger('activation')
 
 function updateStatus(message: string, tone: 'info' | 'error' | 'success') {
   if (!statusBox) {
@@ -37,7 +38,7 @@ async function closeAndLaunch() {
   try {
     await getCurrentWebviewWindow().close()
   } catch (err) {
-    logError('failed to close activation window', err)
+    logger.error('failed to close activation window', err)
   }
 }
 
@@ -48,7 +49,7 @@ async function ensureState() {
       await closeAndLaunch()
     }
   } catch (err) {
-    logError('failed to query activation status', err)
+    logger.error('failed to query activation status', err)
     updateStatus('无法验证激活状态，请重试或联系支持。', 'error')
   }
 }
@@ -59,7 +60,6 @@ async function handleSubmit(event: Event) {
     return
   }
   const code = textarea.value.trim()
-  console.log(code)
   if (!code) {
     updateStatus('请输入激活码。', 'error')
     return
@@ -77,9 +77,7 @@ async function handleSubmit(event: Event) {
     if (payload.success && payload.activated) {
       updateStatus('激活成功，正在启动应用…', 'success')
       setTimeout(() => {
-        closeAndLaunch().catch((err) =>
-          logError('failed to close activation window', err),
-        )
+        closeAndLaunch().catch((err) => logger.error('failed to close activation window', err))
       }, 300)
       return
     }
@@ -97,9 +95,7 @@ async function handleSubmit(event: Event) {
       case 'disabled':
         updateStatus('当前版本未启用激活校验。', 'info')
         setTimeout(() => {
-          closeAndLaunch().catch((err) =>
-            logError('failed to close activation window', err),
-          )
+          closeAndLaunch().catch((err) => logger.error('failed to close activation window', err))
         }, 200)
         break
       default:
@@ -107,7 +103,7 @@ async function handleSubmit(event: Event) {
         break
     }
   } catch (err) {
-    logError('submit activation error', err)
+    logger.error('submit activation error', err)
     updateStatus('验证过程中出现错误，激活码无效。', 'error')
   } finally {
     submitButton?.removeAttribute('disabled')

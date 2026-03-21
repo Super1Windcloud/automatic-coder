@@ -4,7 +4,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { check, DownloadEvent, Update } from '@tauri-apps/plugin-updater'
 import { useEffect, useMemo, useState } from 'react'
-import { logError, logInfo, logWarn } from '@/lib/logger.ts'
+import { createScopedLogger } from '@/lib/logger.ts'
 import { ignoreMouseEvents } from '@/lib/system.ts'
 
 type UpdateStatus =
@@ -15,6 +15,8 @@ type UpdateStatus =
   | 'no-update'
   | 'error'
 
+const logger = createScopedLogger('update-window')
+
 export default function UpdateWindow() {
   const [status, setStatus] = useState<UpdateStatus>('checking')
   const [progress, setProgress] = useState(0)
@@ -24,33 +26,33 @@ export default function UpdateWindow() {
   useEffect(() => {
     const current = getCurrentWindow()
     current.center().catch((err) => {
-      logError('更新窗口居中失败', err)
+      logger.error('更新窗口居中失败', err)
     })
     current.show().catch((err) => {
-      logError('更新窗口显示失败', err)
+      logger.error('更新窗口显示失败', err)
     })
     current.setIgnoreCursorEvents(false).catch((err) => {
-      logWarn('无法启用更新窗口的鼠标事件', err)
+      logger.warn('无法启用更新窗口的鼠标事件', err)
     })
 
     let isMounted = true
     const run = async () => {
       try {
-        logInfo('开始检查更新')
+        logger.info('开始检查更新')
         const currentVersion = await getVersion()
         const update = await check()
         if (!isMounted) return
 
         if (!update) {
           setStatus('no-update')
-          logInfo(
+          logger.info(
             `当前已是最新版本，当前版本 ${currentVersion}，远程版本 ${currentVersion}`,
           )
           return
         }
 
         setUpdateInfo(update)
-        logInfo(
+        logger.info(
           `发现新版本 ${update.version}，当前版本 ${currentVersion}，远程版本 ${update.version}`,
         )
         setStatus('prompt')
@@ -58,12 +60,12 @@ export default function UpdateWindow() {
         if (!isMounted) return
         const message = '检查更新失败，请稍后重试。'
         setError(message)
-        logError(message, err)
+        logger.error(message, err)
         setStatus('error')
       }
     }
 
-    run().catch((err) => logError('检查更新任务执行失败', err))
+    run().catch((err) => logger.error('检查更新任务执行失败', err))
 
     return () => {
       isMounted = false
@@ -85,7 +87,7 @@ export default function UpdateWindow() {
     setStatus('downloading')
     setProgress(0)
     setError(null)
-    logInfo(`开始下载更新包 ${updateInfo.version}`)
+    logger.info(`开始下载更新包 ${updateInfo.version}`)
 
     let downloaded = 0
     let total = 0
@@ -95,7 +97,7 @@ export default function UpdateWindow() {
         switch (event.event) {
           case 'Started':
             total = event.data.contentLength ?? 0
-            logInfo(
+            logger.info(
               `更新包下载开始，大小 ${total > 0 ? `${total} bytes` : '未知'}`,
             )
             break
@@ -108,37 +110,37 @@ export default function UpdateWindow() {
           case 'Finished':
             setProgress(1)
             setStatus('finished')
-            logInfo('更新包下载完成')
+            logger.info('更新包下载完成')
             break
           default:
             break
         }
       })
       setTimeout(async () => {
-        logInfo('更新安装完成，准备重启应用')
+        logger.info('更新安装完成，准备重启应用')
         try {
           await relaunch()
         } catch (relaunchError) {
-          logError('应用重启失败', relaunchError)
+          logger.error('应用重启失败', relaunchError)
         }
       }, 1200)
     } catch (err) {
       const message = '下载更新失败，请重试。'
       setStatus('error')
       setError(message)
-      logError(message, err)
+      logger.error(message, err)
     }
   }
 
   const handleLater = async () => {
     try {
-      logInfo('用户选择稍后提醒')
+      logger.info('用户选择稍后提醒')
       await ignoreMouseEvents('main')
       const win = getCurrentWindow()
       await win.close()
-      logInfo('更新窗口已关闭')
+      logger.info('更新窗口已关闭')
     } catch (err) {
-      logError('关闭更新窗口失败', err)
+      logger.error('关闭更新窗口失败', err)
     }
   }
 

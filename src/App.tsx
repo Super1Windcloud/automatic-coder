@@ -8,7 +8,7 @@ import { HashRouter, Route, Routes } from "react-router-dom";
 import AutoUpdater from "@/components/AudoUpdater.tsx";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { logError } from "@/lib/logger.ts";
+import { createScopedLogger } from "@/lib/logger.ts";
 import { registryGlobalShortcut } from "@/lib/shortcut.ts";
 import { ignoreMouseEvents } from "@/lib/system.ts";
 import UpdateWindow from "@/pages/UpdateWindow.tsx";
@@ -16,6 +16,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+const logger = createScopedLogger("app");
 
 const MainApp = ({
   hasSolution,
@@ -66,7 +67,7 @@ function App() {
     try {
       await invoke("show_window");
     } catch (err) {
-      logError("show window err", err);
+      logger.error("show window err", err);
     }
   };
 
@@ -82,7 +83,7 @@ function App() {
         await registryGlobalShortcut();
         await revealMainWindow();
       } catch (err) {
-        logError("shortcut err", err);
+        logger.error("shortcut err", err);
       }
     };
 
@@ -101,15 +102,15 @@ function App() {
           }
         });
       } catch (err) {
-        logError("activation bootstrap err", err);
+        logger.error("activation bootstrap err", err);
       }
     };
 
     ignoreMouseEvents("main").catch((err) => {
-      logError("mouse err", err);
+      logger.error("mouse err", err);
     });
     waitForActivationAndRegister().catch((err) => {
-      logError("wait activation err", err);
+      logger.error("wait activation err", err);
     });
 
     return () => {

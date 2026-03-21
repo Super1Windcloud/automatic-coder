@@ -1,5 +1,6 @@
 use crate::config::{open_language_selector, toggle_vlm_model};
-use crate::utils::{is_dev, toggle_webview_devtools, write_some_log};
+use crate::utils::{is_dev, toggle_webview_devtools};
+use crate::{app_debug, app_error, app_info};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -49,7 +50,7 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                     if shortcut == &hide_or_show_shortcut {
                         match event.state() {
                             ShortcutState::Pressed => {
-                                println!("{:?}", shortcut);
+                                app_debug!("system", "shortcut pressed: {:?}", shortcut);
                             }
                             ShortcutState::Released => {
                                 let window = _app.get_webview_window("main").unwrap();
@@ -74,32 +75,32 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                     } else if shortcut == &toggle_dev_tools_shortcut {
                         match event.state() {
                             ShortcutState::Pressed => {
-                                println!("{:?}", shortcut);
+                                app_debug!("system", "shortcut pressed: {:?}", shortcut);
                             }
                             ShortcutState::Released => toggle_webview_devtools(_app),
                         }
                     } else if shortcut == &open_language_window {
                         match event.state() {
                             ShortcutState::Pressed => {
-                                println!("{:?}", shortcut);
+                                app_debug!("system", "shortcut pressed: {:?}", shortcut);
                             }
                             ShortcutState::Released => open_language_selector(_app),
                         }
                     } else if shortcut == &quit_shortcut {
                         match event.state() {
                             ShortcutState::Pressed => {
-                                println!("{:?}", shortcut);
+                                app_debug!("system", "shortcut pressed: {:?}", shortcut);
                             }
                             ShortcutState::Released => graceful_exit(_app),
                         }
                     } else if shortcut == &toggle_model_shortcut {
-                        dbg!("toggle vlm model");
                         match event.state() {
                             ShortcutState::Pressed => {
-                                println!("{:?}", shortcut);
+                                app_debug!("system", "shortcut pressed: {:?}", shortcut);
                             }
                             ShortcutState::Released => match toggle_vlm_model(_app) {
                                 Ok(model) => {
+                                    app_info!("system", "VLM model switched to {model:?}");
                                     if is_dev() {
                                         _app.notification()
                                             .builder()
@@ -107,13 +108,10 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                                             .body(format!("Tauri VLM Model is {model:?}"))
                                             .show()
                                             .unwrap()
-                                    } else {
-                                        write_some_log(
-                                            format!("Tauri VLM Model is {model:?}").as_str(),
-                                        )
                                     }
                                 }
                                 Err(err) => {
+                                    app_error!("system", "{err}");
                                     if is_dev() {
                                         _app.notification()
                                             .builder()
@@ -121,8 +119,6 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                                             .body(err)
                                             .show()
                                             .unwrap()
-                                    } else {
-                                        write_some_log(&err)
                                     }
                                 }
                             },
@@ -155,7 +151,7 @@ pub fn register_activation_shortcut(app: &AppHandle) {
     }
     let shortcut = activation_shortcut_definition();
     if let Err(err) = app.global_shortcut().register(shortcut) {
-        println!("failed to register activation shortcut: {err}");
+        app_error!("system", "failed to register activation shortcut: {err}");
         ACTIVATION_SHORTCUT_REGISTERED.store(false, Ordering::SeqCst);
     }
 }
@@ -229,6 +225,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             }
             "toggle_model" => match toggle_vlm_model(app) {
                 Ok(model) => {
+                    app_info!("system", "VLM model switched to {model:?}");
                     if is_dev() {
                         app.notification()
                             .builder()
@@ -236,11 +233,10 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                             .body(format!("Tauri VLM Model is {model:?}"))
                             .show()
                             .unwrap()
-                    } else {
-                        write_some_log(format!("Tauri VLM Model is {model:?}").as_str())
                     }
                 }
                 Err(err) => {
+                    app_error!("system", "{err}");
                     if is_dev() {
                         app.notification()
                             .builder()
@@ -248,8 +244,6 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                             .body(err)
                             .show()
                             .unwrap()
-                    } else {
-                        write_some_log(&err)
                     }
                 }
             },

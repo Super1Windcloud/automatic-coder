@@ -1,7 +1,8 @@
 #![allow(clippy::collapsible_if)]
 
 use crate::config::{AppState, DEFAULT_VLM_MODEL};
-use crate::utils::{get_env_key, is_dev, write_some_log};
+use crate::utils::get_env_key;
+use crate::{app_debug, app_error, app_info};
 use base64::{Engine, engine::general_purpose};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
@@ -57,12 +58,7 @@ impl std::error::Error for VlmError {
 }
 
 fn log_vlm_error(context: &str, err: &VlmError) {
-    let message = format!("[VLM] {context}: {err}");
-    if is_dev() {
-        println!("{message}");
-    } else {
-        write_some_log(&message);
-    }
+    app_error!("vlm", "{context}: {err}");
 }
 
 fn append_delta_field(app_handle: &AppHandle, field: Option<&Value>, buffer: &mut String) -> bool {
@@ -124,12 +120,7 @@ fn append_segment(app_handle: &AppHandle, buffer: &mut String, text: &str) -> bo
     }
     buffer.push_str(text);
     if let Err(err) = app_handle.emit("completion_stream", text) {
-        let message = format!("completion_stream 事件发送失败: {err}");
-        if is_dev() {
-            println!("{message}");
-        } else {
-            write_some_log(&message);
-        }
+        app_error!("vlm", "completion_stream 事件发送失败: {err}");
     }
     true
 }
@@ -181,11 +172,11 @@ async fn request_chat_completion_stream_thinking(prompt: String, image_url: Stri
 
     while let Some(chunk) = res.chunk().await.expect("读取 chunk 失败") {
         let text = String::from_utf8_lossy(&chunk);
-        println!("chunk: {}", text);
+        app_debug!("vlm", "chunk: {}", text);
         for line in text.lines() {
             if let Some(data) = line.strip_prefix("data: ") {
                 if data.trim() == "[DONE]" {
-                    println!("流式完成事件");
+                    app_debug!("vlm", "流式完成事件");
                     break;
                 }
 
@@ -206,12 +197,12 @@ async fn request_chat_completion_stream_thinking(prompt: String, image_url: Stri
                             if let Some(added) =
                                 append_plain_field(delta_obj.get("content"), &mut result)
                             {
-                                println!("content: {}", added);
+                                app_debug!("vlm", "content: {}", added);
                             }
                             if let Some(reasoning) =
                                 append_plain_field(delta_obj.get("reasoning_content"), &mut reason)
                             {
-                                println!("reasoning_content: {}", reasoning);
+                                app_debug!("vlm", "reasoning_content: {}", reasoning);
                             }
                         }
 
@@ -219,13 +210,13 @@ async fn request_chat_completion_stream_thinking(prompt: String, image_url: Stri
                             if let Some(added) =
                                 append_plain_field(message_obj.get("content"), &mut result)
                             {
-                                println!("content: {}", added);
+                                app_debug!("vlm", "content: {}", added);
                             }
                             if let Some(reasoning) = append_plain_field(
                                 message_obj.get("reasoning_content"),
                                 &mut reason,
                             ) {
-                                println!("reasoning_content: {}", reasoning);
+                                app_debug!("vlm", "reasoning_content: {}", reasoning);
                             }
                         }
                     }
@@ -234,12 +225,12 @@ async fn request_chat_completion_stream_thinking(prompt: String, image_url: Stri
         }
     }
 
-    println!("reason: {}", reason);
-    println!("result: {}", result);
+    app_debug!("vlm", "reason: {}", reason);
+    app_debug!("vlm", "result: {}", result);
 
     let end_time = std::time::Instant::now();
     calc_cost(prompt.len(), result.len());
-    println!("time: {} s", (end_time - start_time).as_secs());
+    app_info!("vlm", "time: {} s", (end_time - start_time).as_secs());
     result
 }
 async fn request_chat_completion_stream(
@@ -248,7 +239,7 @@ async fn request_chat_completion_stream(
     prompt: String,
     image_url: String,
 ) -> Result<String, VlmError> {
-    dbg!(model);
+    app_debug!("vlm", "request model: {}", model);
     let messages = json!([
         {
             "role": "system",
@@ -367,7 +358,7 @@ async fn request_chat_completion_stream(
                         append_delta_field(app_handle, delta_obj.get("content"), &mut result);
                     if let Some(reasoning) = collect_plain_chunk(delta_obj.get("reasoning_content"))
                     {
-                        println!("reasoning_content: {}", reasoning);
+                        app_debug!("vlm", "reasoning_content: {}", reasoning);
                     }
                 }
                 if let Some(message_obj) = message {
@@ -376,7 +367,7 @@ async fn request_chat_completion_stream(
                     if let Some(reasoning) =
                         collect_plain_chunk(message_obj.get("reasoning_content"))
                     {
-                        println!("reasoning_content: {}", reasoning);
+                        app_debug!("vlm", "reasoning_content: {}", reasoning);
                     }
                 }
 
@@ -407,14 +398,12 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
         let assets = log_dir.join("assets");
         assets.to_path_buf()
     } else {
-        write_some_log("unknown platform to support");
+        app_error!("vlm", "unknown platform to support");
         std::process::exit(1);
     };
     let state = app_handle.state::<AppState>();
     let prompt = state.prompt.lock().unwrap().clone();
-    if !is_dev() {
-        write_some_log(assets_path.to_str().unwrap())
-    }
+    app_info!("vlm", "assets path: {}", assets_path.display());
     let entries: Vec<_> = std::fs::read_dir(&assets_path)
         .map_err(|err| format!("读取资源目录失败: {err}"))?
         .filter_map(Result::ok)
@@ -426,9 +415,7 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
         .collect();
 
     if let Some(first_image) = entries.first() {
-        if !is_dev() {
-            write_some_log(first_image.path().to_str().unwrap())
-        }
+        app_info!("vlm", "using image: {}", first_image.path().display());
         let bytes =
             std::fs::read(first_image.path()).map_err(|err| format!("读取图片失败: {err}"))?;
         let base64_str = general_purpose::STANDARD.encode(&bytes);
@@ -488,7 +475,7 @@ fn calc_cost<T: ToF64, U: ToF64>(input_tokens: T, output_tokens: U) -> f64 {
     let result = (input_tokens.to_f64() * input_price_per_m
         + output_tokens.to_f64() * output_price_per_m)
         / 1_000_000.0;
-    println!("cost: {} ¥", result);
+    app_info!("vlm", "cost: {} ¥", result);
     result
 }
 

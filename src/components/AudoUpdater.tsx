@@ -2,10 +2,11 @@ import { getVersion } from '@tauri-apps/api/app'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { check } from '@tauri-apps/plugin-updater'
 import { useEffect, useRef } from 'react'
-import { logError, logInfo, logWarn } from '@/lib/logger.ts'
+import { createScopedLogger } from '@/lib/logger.ts'
 import { ignoreMouseEvents, startMouseEvents } from '@/lib/system.ts'
 
 const UPDATE_WINDOW_LABEL = 'updater'
+const logger = createScopedLogger('auto-updater')
 
 export async function openUpdateWindow() {
   if (typeof WebviewWindow.getByLabel === 'function') {
@@ -15,7 +16,7 @@ export async function openUpdateWindow() {
         await existing.close()
       }
     } catch (error) {
-      logWarn('关闭旧的更新窗口失败', error)
+      logger.warn('关闭旧的更新窗口失败', error)
     }
   }
 
@@ -35,22 +36,22 @@ export async function openUpdateWindow() {
   })
 
   await updater.once('tauri://created', async () => {
-    logInfo('更新窗口已创建')
+    logger.info('更新窗口已创建')
     try {
       await startMouseEvents(UPDATE_WINDOW_LABEL)
     } catch (error) {
-      logWarn('无法开启更新窗口的鼠标事件', error)
+      logger.warn('无法开启更新窗口的鼠标事件', error)
     }
     await updater.show().catch((err) => {
-      logError('更新窗口显示失败', err)
+      logger.error('更新窗口显示失败', err)
     })
     await updater.setFocus().catch((err) => {
-      logError('更新窗口获取焦点失败', err)
+      logger.error('更新窗口获取焦点失败', err)
     })
   })
 
   await updater.once('tauri://error', (e) => {
-    logError('更新窗口创建失败', e)
+    logger.error('更新窗口创建失败', e)
   })
 
   return updater
@@ -77,24 +78,24 @@ export default function AutoUpdater() {
         const update = await check()
 
         if (!update) {
-          logInfo(
+          logger.info(
             `✅ 当前已是最新版本，当前版本 ${currentVersion}，远程版本 ${currentVersion}`,
           )
           return
         }
 
-        logInfo(
+        logger.info(
           `发现新版本 ${update.version}，当前版本 ${currentVersion}，远程版本 ${update.version}`,
         )
         openUpdateWindow()
           .catch((err) => {
-            logError('打开更新窗口失败', err)
+            logger.error('打开更新窗口失败', err)
           })
           .finally(async () => {
             await ignoreMouseEvents('main')
           })
       } catch (err) {
-        logError('检查更新失败', err)
+        logger.error('检查更新失败', err)
       }
     }
     doCheck()

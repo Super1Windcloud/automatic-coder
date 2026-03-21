@@ -48,10 +48,15 @@ pub fn run() {
             "unknown location".to_string()
         };
 
-        write_some_log(&format!("panic: {payload} @ {location}"));
+        app_error!("app", "panic: {payload} @ {location}");
     }));
 
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(tauri_plugin_log::log::LevelFilter::Info)
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
@@ -69,7 +74,6 @@ pub fn run() {
             create_screenshot_solution_stream,
             set_vlm_key,
             set_vlm_model,
-            append_app_log,
             get_activation_status,
             submit_activation_code
         ])
@@ -131,27 +135,16 @@ fn check_activation_status(app: &mut App<Wry>) {
                 }
                 Ok(None) => {
                     state.disable();
-                    if is_dev() {
-                        println!(
-                            "activation repository unavailable; continuing without activation gate"
-                        );
-                    } else {
-                        write_some_log(
-                            "activation repository unavailable; continuing without activation gate",
-                        );
-                    }
+                    app_warn!(
+                        "app",
+                        "activation repository unavailable; continuing without activation gate"
+                    );
                     register_activation_shortcut(app.handle());
                     // show_main_window_now(app.handle());
                 }
                 Err(err) => {
                     state.disable();
-                    if is_dev() {
-                        println!("activation repository initialisation failed: {err}");
-                    } else {
-                        write_some_log(
-                            format!("activation repository initialisation failed: {err}").as_str(),
-                        );
-                    }
+                    app_error!("app", "activation repository initialisation failed: {err}");
                     register_activation_shortcut(app.handle());
                     // show_main_window_now(app.handle());
                 }
@@ -160,11 +153,7 @@ fn check_activation_status(app: &mut App<Wry>) {
         Err(err) => {
             let state: tauri::State<LicenseState> = app.state();
             state.disable();
-            if is_dev() {
-                println!("{err}");
-            } else {
-                write_some_log(format!("{err}").as_str());
-            }
+            app_error!("app", "{err}");
             show_main_window_now(app.handle());
         }
     }

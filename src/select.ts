@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { getLLMPrompts, templatePattern } from '@/assets/constant.ts'
-import { logError } from '@/lib/logger.ts'
+import { createScopedLogger } from '@/lib/logger.ts'
 
 const selectButton = document.getElementById('select-button')
 const languageSelect = document.getElementById('language-select')
@@ -8,6 +8,7 @@ const promptInput = document.getElementById('prompt-input')
 const directionSelect = document.getElementById('direction-select')
 const vlmKeyInput = document.getElementById('key-input')
 const modelSelect = document.getElementById('model-select')
+const logger = createScopedLogger('select')
 selectButton?.addEventListener('click', async () => {
   const selectedLanguage = (languageSelect as HTMLSelectElement).value
   const llmPrompt = (promptInput as HTMLTextAreaElement).value.trim()
@@ -49,7 +50,7 @@ selectButton?.addEventListener('click', async () => {
       prompt,
     })
   } catch (err) {
-    logError('调用 Rust 命令失败', err)
+    logger.error('调用 Rust 命令失败', err)
   }
 })
 
@@ -63,11 +64,10 @@ async function loadPreferences() {
       vlm_model: string
     }
     if (config) {
-      console.log('Loaded config:', config)
       const language = document.getElementById(
         'language-select',
       ) as HTMLSelectElement
-      if (!language) console.error('language error ')
+      if (!language) logger.error('language select missing')
       language.value = config.code_language || 'TypeScript'
       ;(
         document.getElementById('direction-select') as HTMLSelectElement
@@ -79,7 +79,7 @@ async function loadPreferences() {
         config.vlm_model || 'zai-org/GLM-4.5V'
     }
   } catch (err) {
-    logError('加载配置失败', err)
+    logger.error('加载配置失败', err)
   }
 }
 

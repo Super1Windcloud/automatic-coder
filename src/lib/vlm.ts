@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
-import { logError } from '@/lib/logger.ts'
+import { createScopedLogger } from '@/lib/logger.ts'
+
+const logger = createScopedLogger('vlm')
 
 export async function getScreenShotSolutionFromVLM(
   renderCallBack: (content: string) => void,
@@ -16,9 +18,9 @@ export async function getScreenShotSolutionFromVLM(
   })
 
   invoke('create_screenshot_solution_stream')
-    .then((res) => console.log('截图方案生成成功', res))
+    .then(() => logger.info('截图方案生成成功'))
     .catch((err) => {
-      logError('get solution error', err)
+      logger.error('get solution error', err)
       unlistenFn()
     })
     .finally(() => {
