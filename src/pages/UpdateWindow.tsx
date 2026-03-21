@@ -1,3 +1,4 @@
+import { getVersion } from '@tauri-apps/api/app'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { relaunch } from '@tauri-apps/plugin-process'
@@ -36,18 +37,21 @@ export default function UpdateWindow() {
     const run = async () => {
       try {
         logInfo('开始检查更新')
+        const currentVersion = await getVersion()
         const update = await check()
         if (!isMounted) return
 
         if (!update) {
           setStatus('no-update')
-          logInfo('当前已是最新版本')
+          logInfo(
+            `当前已是最新版本，当前版本 ${currentVersion}，远程版本 ${currentVersion}`,
+          )
           return
         }
 
         setUpdateInfo(update)
         logInfo(
-          `发现新版本 ${update.version}，当前版本 ${update.currentVersion}`,
+          `发现新版本 ${update.version}，当前版本 ${currentVersion}，远程版本 ${update.version}`,
         )
         setStatus('prompt')
       } catch (err) {

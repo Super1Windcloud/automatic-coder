@@ -1,3 +1,4 @@
+import { getVersion } from '@tauri-apps/api/app'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { check } from '@tauri-apps/plugin-updater'
 import { useEffect, useRef } from 'react'
@@ -72,14 +73,19 @@ export default function AutoUpdater() {
         }
         hasCheckedRef.current = true
 
+        const currentVersion = await getVersion()
         const update = await check()
 
         if (!update) {
-          logInfo('✅ 当前已是最新版本')
+          logInfo(
+            `✅ 当前已是最新版本，当前版本 ${currentVersion}，远程版本 ${currentVersion}`,
+          )
           return
         }
 
-        logInfo(`发现新版本 ${update.version}`)
+        logInfo(
+          `发现新版本 ${update.version}，当前版本 ${currentVersion}，远程版本 ${update.version}`,
+        )
         openUpdateWindow()
           .catch((err) => {
             logError('打开更新窗口失败', err)
