@@ -5,9 +5,29 @@ use image::ImageFormat;
 use std::io::Cursor;
 use tauri::State;
 use xcap::Monitor;
+use std::env;
 
 fn normalized(filename: String) -> String {
-    filename.replace(['|', '\\', ':', '/'], "")
+    filename
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' => ch,
+            _ => '_',
+        })
+        .collect()
+}
+
+fn should_skip_save() -> bool {
+    matches!(
+        env::var("CAPTURE_SKIP_SAVE").as_deref(),
+        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES")
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn capture_assets_dir() -> Result<std::path::PathBuf, String> {
+    let base = dirs::data_dir().ok_or_else(|| "failed to resolve data dir".to_string())?;
+    Ok(base.join("interview_coder_app").join("assets"))
 }
 
 fn get_region(
@@ -67,19 +87,28 @@ pub fn get_screen_capture_to_bytes(
     states: State<AppState>,
     _app: tauri::AppHandle,
 ) -> Result<Vec<u8>, String> {
+    write_some_log("capture_bytes: begin");
     let monitor = get_primary_monitor()?;
     let (monitor_width, monitor_height) = get_monitor_dimensions(&monitor)?;
+    write_some_log(&format!(
+        "capture_bytes: monitor {}x{}",
+        monitor_width, monitor_height
+    ));
 
     let direction = get_capture_direction(&states)?;
+    write_some_log(&format!("capture_bytes: direction {:?}", direction));
 
     let (x, y, w, h) = get_region(monitor_width, monitor_height, &direction);
+    write_some_log(&format!("capture_bytes: region {x},{y} {w}x{h}"));
     let image = monitor
         .capture_region(x as u32, y as u32, w, h)
         .map_err(|err| format!("capture_region failed: {err}"))?;
+    write_some_log("capture_bytes: region captured");
 
     #[cfg(target_os = "windows")]
     {
-        if let Err(err) = dir::create_all("assets", true) {
+        let assets_dir = capture_assets_dir()?;
+        if let Err(err) = dir::create_all(assets_dir.as_path(), false) {
             let message = format!("failed to create assets directory: {err}");
             write_some_log(&message);
             return Err(message);
@@ -88,17 +117,23 @@ pub fn get_screen_capture_to_bytes(
         let monitor_name = monitor
             .name()
             .unwrap_or_else(|_| "unknown".to_string());
-        let file_path = format!(
-            "assets/monitor-{}-{:?}.png",
-            normalized(monitor_name),
-            &direction
-        );
-        if let Err(err) = image.save(&file_path) {
-            let message = format!("failed to save capture: {err}");
-            write_some_log(&message);
-            return Err(message);
+        let file_name = format!("monitor-{}-{:?}.png", normalized(monitor_name), &direction);
+        let file_path = assets_dir.join(file_name);
+        if should_skip_save() {
+            write_some_log(&format!(
+                "capture_bytes: skip save (CAPTURE_SKIP_SAVE=1) {}",
+                file_path.display()
+            ));
+        } else {
+            write_some_log(&format!("capture_bytes: save {}", file_path.display()));
+            if let Err(err) = image.save(&file_path) {
+                let message = format!("failed to save capture: {err}");
+                write_some_log(&message);
+                return Err(message);
+            }
         }
         let mut buf = Cursor::new(Vec::new());
+        write_some_log("capture_bytes: encoding png");
         if let Err(err) = image.write_to(&mut buf, ImageFormat::Png) {
             let message = format!("failed to encode capture: {err}");
             write_some_log(&message);
@@ -134,6 +169,7 @@ pub fn get_screen_capture_to_bytes(
             return Err(message);
         }
         let mut buf = Cursor::new(Vec::new());
+        write_some_log("capture_bytes: encoding png");
         if let Err(err) = image.write_to(&mut buf, ImageFormat::Png) {
             let message = format!("failed to encode capture: {err}");
             write_some_log(&message);
@@ -145,30 +181,53 @@ pub fn get_screen_capture_to_bytes(
 
 #[tauri::command]
 pub fn get_screen_capture_to_path(states: State<AppState>) -> Result<String, String> {
+    write_some_log("capture_path: begin");
     let monitor = get_primary_monitor()?;
-    if let Err(err) = dir::create_all("assets", true) {
+    if should_skip_save() {
+        let message = "capture_path: save disabled by CAPTURE_SKIP_SAVE".to_string();
+        write_some_log(&message);
+        return Err(message);
+    }
+    #[cfg(target_os = "windows")]
+    let assets_dir = capture_assets_dir()?;
+
+    #[cfg(target_os = "windows")]
+    let create_assets = dir::create_all(assets_dir.as_path(), false);
+    #[cfg(not(target_os = "windows"))]
+    let create_assets = dir::create_all("assets", true);
+
+    if let Err(err) = create_assets {
         let message = format!("failed to create assets directory: {err}");
         write_some_log(&message);
         return Err(message);
     }
 
     let (monitor_width, monitor_height) = get_monitor_dimensions(&monitor)?;
+    write_some_log(&format!(
+        "capture_path: monitor {}x{}",
+        monitor_width, monitor_height
+    ));
 
     let direction = get_capture_direction(&states)?;
+    write_some_log(&format!("capture_path: direction {:?}", direction));
 
     let (x, y, w, h) = get_region(monitor_width, monitor_height, &direction);
+    write_some_log(&format!("capture_path: region {x},{y} {w}x{h}"));
     let image = monitor
         .capture_region(x as u32, y as u32, w, h)
         .map_err(|err| format!("capture_region failed: {err}"))?;
+    write_some_log("capture_path: region captured");
 
     let monitor_name = monitor
         .name()
         .unwrap_or_else(|_| "unknown".to_string());
-    let file_path = format!(
-        "assets/monitor-{}-{:?}.png",
-        normalized(monitor_name),
-        &direction
-    );
+    let file_name = format!("monitor-{}-{:?}.png", normalized(monitor_name), &direction);
+    #[cfg(target_os = "windows")]
+    let file_path = assets_dir.join(file_name);
+    #[cfg(not(target_os = "windows"))]
+    let file_path = std::path::PathBuf::from(format!("assets/{}", file_name));
+
+    write_some_log(&format!("capture_path: save {}", file_path.display()));
     if let Err(err) = image.save(&file_path) {
         let message = format!("failed to save capture: {err}");
         write_some_log(&message);

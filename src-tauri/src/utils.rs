@@ -48,27 +48,26 @@ pub fn is_dev() -> bool {
 pub fn write_some_log(msg: &str) {
     #[cfg(target_os = "macos")]
     {
-        let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
-        let mut path = PathBuf::from(log_dir);
-        path.push("interview_coder_app.log");
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .unwrap();
-
-        writeln!(file, "{}", msg).unwrap();
+        if let Some(log_dir) = dirs::data_dir() {
+            let mut path = PathBuf::from(log_dir.join("interview_coder_app"));
+            path.push("interview_coder_app.log");
+            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+                let _ = writeln!(file, "{}", msg);
+                let _ = file.flush();
+            }
+        }
     }
 
     #[cfg(target_os = "windows")]
     {
-        let mut file = OpenOptions::new()
+        if let Ok(mut file) = OpenOptions::new()
             .create(true) // 文件不存在则创建
             .append(true) // 追加写入
-            .open("app.log") // 日志文件名
-            .unwrap();
-
-        writeln!(file, "{}", msg).unwrap(); // 写入一行
+            .open("app.log")
+        {
+            let _ = writeln!(file, "{}", msg);
+            let _ = file.flush();
+        }
     }
 }
 
