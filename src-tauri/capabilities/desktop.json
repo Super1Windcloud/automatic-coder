@@ -7,7 +7,8 @@
   ],
   "windows": [
     "main",
-    "updater"
+    "updater",
+    "code_language_selector"
   ],
   "allowlist": {
     "all": true
@@ -39,6 +40,7 @@
       ]
     },
     "core:window:allow-close",
+    "core:window:allow-start-dragging",
     "opener:allow-open-url",
     "core:window:allow-show",
     "core:window:allow-center",

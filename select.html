@@ -15,24 +15,92 @@
           #1a0028
         ); /* 暗紫色渐变背景 */
         display: flex;
-        justify-content: center;
-        align-items: center;
+        width: 100vw;
         height: 100vh;
         color: #eee;
+        overflow: hidden;
       }
 
       .card {
+        position: relative;
         background: #2a1a40; /* 深紫色卡片 */
         padding: 30px;
-        border-radius: 16px;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-        width: 400px;
-        max-width: 90%;
+        box-sizing: border-box;
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0;
+        box-shadow: none;
+        overflow-y: auto;
+      }
+
+      .close-button {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #f3ddff;
+        font-size: 22px;
+        font-weight: 400;
+        line-height: 1;
+        app-region: no-drag;
+        -webkit-app-region: no-drag;
+      }
+
+      .close-button:hover {
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .drag-bar {
+        margin: -10px -10px 18px;
+        padding: 10px 52px 10px 10px;
+        border-radius: 12px;
+        cursor: grab;
+        user-select: none;
+        background: rgba(255, 255, 255, 0.04);
+        app-region: drag;
+        -webkit-app-region: drag;
+      }
+
+      .drag-bar:active {
+        cursor: grabbing;
+      }
+
+      .drag-handle {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 8px;
+        color: #d8b9ff;
+        font-size: 18px;
+        letter-spacing: 2px;
+        user-select: none;
+        app-region: drag;
+        -webkit-app-region: drag;
+      }
+
+      .drag-tip {
+        text-align: center;
+        color: lightpink;
+        font-size: 13px;
+      }
+
+      .drag-bar h2,
+      .drag-bar .drag-tip {
+        margin-left: auto;
+        margin-right: auto;
+        width: fit-content;
+        user-select: none;
+        app-region: drag;
+        -webkit-app-region: drag;
       }
 
       h2 {
         text-align: center;
-        margin-bottom: 20px;
+        margin: 0 0 8px;
         color: #d1b3ff; /* 浅紫色标题 */
       }
 
@@ -58,6 +126,8 @@
         transition:
           border-color 0.2s,
           box-shadow 0.2s;
+        app-region: no-drag;
+        -webkit-app-region: no-drag;
       }
 
       textarea {
@@ -86,6 +156,8 @@
         transition:
           background 0.2s,
           transform 0.1s;
+        app-region: no-drag;
+        -webkit-app-region: no-drag;
       }
 
       button:hover {
@@ -99,10 +171,20 @@
   </head>
   <body>
     <div class="card">
-      <h2>请选择偏好设置</h2>
-      <p style="text-align: center; color: lightpink; cursor: pointer">
-        关闭之后可通过托盘再次打开
-      </p>
+      <button
+        id="close-button"
+        class="close-button"
+        type="button"
+        aria-label="关闭"
+      >
+        ×
+      </button>
+      <div class="drag-bar" data-tauri-drag-region>
+        <h2>请选择偏好设置</h2>
+        <div class="drag-tip">
+          按住这里可以拖动窗口，关闭后可通过托盘再次打开
+        </div>
+      </div>
 
       <label for="language-select">💻 编程语言</label>
       <select id="language-select">

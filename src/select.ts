@@ -1,14 +1,25 @@
 import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getLLMPrompts, templatePattern } from '@/assets/constant.ts'
 import { createScopedLogger } from '@/lib/logger.ts'
 
 const selectButton = document.getElementById('select-button')
+const closeButton = document.getElementById('close-button')
 const languageSelect = document.getElementById('language-select')
 const promptInput = document.getElementById('prompt-input')
 const directionSelect = document.getElementById('direction-select')
 const vlmKeyInput = document.getElementById('key-input')
 const modelSelect = document.getElementById('model-select')
 const logger = createScopedLogger('select')
+
+closeButton?.addEventListener('click', async () => {
+  try {
+    await getCurrentWebviewWindow().close()
+  } catch (err) {
+    logger.error('关闭配置窗口失败', err)
+  }
+})
+
 selectButton?.addEventListener('click', async () => {
   const selectedLanguage = (languageSelect as HTMLSelectElement).value
   const llmPrompt = (promptInput as HTMLTextAreaElement).value.trim()

@@ -11,6 +11,14 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_VLM_MODEL: &str = "zai-org/GLM-4.5V";
 pub const STEPFUN_VLM_MODEL: &str = "stepfun-ai/step3";
 
+pub fn alternate_vlm_model(current: &str) -> &'static str {
+    if current == DEFAULT_VLM_MODEL {
+        STEPFUN_VLM_MODEL
+    } else {
+        DEFAULT_VLM_MODEL
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(default)]
 pub struct PreferencesConfig {
@@ -101,9 +109,27 @@ pub fn set_vlm_model(state: State<AppState>, model: String) {
     {
         *state.vlm_model.lock().unwrap() = model.clone();
     }
-    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences").unwrap();
-    cfg.vlm_model = model;
-    confy::store("interview-coder-config", "preferences", cfg).unwrap();
+    persist_vlm_model_value(&model).unwrap();
+}
+
+pub fn persist_vlm_model(app_handle: &AppHandle, model: &str) -> Result<(), String> {
+    if model.is_empty() {
+        return Ok(());
+    }
+    let state: State<AppState> = app_handle.state();
+    *state
+        .vlm_model
+        .lock()
+        .map_err(|_| "模型状态锁获取失败".to_string())? = model.to_string();
+    persist_vlm_model_value(model)
+}
+
+fn persist_vlm_model_value(model: &str) -> Result<(), String> {
+    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences")
+        .map_err(|err| format!("加载配置失败: {err}"))?;
+    cfg.vlm_model = model.to_string();
+    confy::store("interview-coder-config", "preferences", cfg)
+        .map_err(|err| format!("保存配置失败: {err}"))
 }
 
 pub fn toggle_vlm_model(app_handle: &AppHandle) -> Result<String, String> {
@@ -112,18 +138,9 @@ pub fn toggle_vlm_model(app_handle: &AppHandle) -> Result<String, String> {
         .vlm_model
         .lock()
         .map_err(|_| "模型状态锁获取失败".to_string())?;
-    let target = if guard.as_str() == DEFAULT_VLM_MODEL {
-        STEPFUN_VLM_MODEL
-    } else {
-        DEFAULT_VLM_MODEL
-    };
+    let target = alternate_vlm_model(guard.as_str());
     *guard = target.to_string();
-
-    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences")
-        .map_err(|err| format!("加载配置失败: {err}"))?;
-    cfg.vlm_model = target.to_string();
-    confy::store("interview-coder-config", "preferences", cfg)
-        .map_err(|err| format!("保存配置失败: {err}"))?;
+    persist_vlm_model_value(target)?;
 
     Ok(target.to_string())
 }
@@ -196,7 +213,7 @@ pub fn open_language_selector(app_handle: &AppHandle) {
     };
 
     let webview_window = WebviewWindowBuilder::new(app_handle, "code_language_selector", url)
-        .inner_size(800.0, 900.0)
+        .inner_size(600.0, 800.0)
         .build()
         .unwrap();
 
@@ -206,7 +223,7 @@ pub fn open_language_selector(app_handle: &AppHandle) {
     webview_window.set_decorations(false).unwrap();
     webview_window.set_skip_taskbar(true).unwrap();
     webview_window.set_enabled(true).unwrap();
-    webview_window.set_always_on_top(true).unwrap();
+    webview_window.set_always_on_top(false).unwrap();
     webview_window.show().unwrap();
 }
 

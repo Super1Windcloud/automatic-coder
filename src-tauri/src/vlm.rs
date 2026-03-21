@@ -1,9 +1,9 @@
 #![allow(clippy::collapsible_if)]
 
 use crate::capture::capture_screen_png_bytes;
-use crate::config::{AppState, DEFAULT_VLM_MODEL};
+use crate::config::{AppState, DEFAULT_VLM_MODEL, alternate_vlm_model, persist_vlm_model};
 use crate::utils::get_env_key;
-use crate::{app_debug, app_error, app_info};
+use crate::{app_debug, app_error, app_info, app_warn};
 use base64::{Engine, engine::general_purpose};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
@@ -54,6 +54,18 @@ impl std::error::Error for VlmError {
             VlmError::Request(err) | VlmError::Chunk(err) => Some(err),
             VlmError::StreamJson { source, .. } => Some(source),
             _ => None,
+        }
+    }
+}
+
+impl VlmError {
+    fn is_model_disabled(&self) -> bool {
+        match self {
+            VlmError::Status { code, body } => {
+                *code == StatusCode::FORBIDDEN && body.contains("Model disabled")
+            }
+            VlmError::Api(message) => message.contains("Model disabled"),
+            _ => false,
         }
     }
 }
@@ -416,8 +428,27 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
             locked.clone()
         }
     };
-    match request_chat_completion_stream(&app_handle, &model_name, prompt, base64).await {
+    match request_chat_completion_stream(&app_handle, &model_name, prompt.clone(), base64.clone()).await
+    {
         Ok(result) => Ok(result),
+        Err(err) if err.is_model_disabled() => {
+            let fallback_model = alternate_vlm_model(&model_name).to_string();
+            app_warn!(
+                "vlm",
+                "model {model_name} disabled, switching to fallback model {fallback_model}"
+            );
+            persist_vlm_model(&app_handle, &fallback_model)
+                .map_err(|persist_err| format!("模型切换失败: {persist_err}"))?;
+
+            match request_chat_completion_stream(&app_handle, &fallback_model, prompt, base64).await
+            {
+                Ok(result) => Ok(result),
+                Err(retry_err) => {
+                    log_vlm_error("request_chat_completion_stream fallback", &retry_err);
+                    Err(retry_err.to_string())
+                }
+            }
+        }
         Err(err) => {
             log_vlm_error("request_chat_completion_stream", &err);
             Err(err.to_string())
