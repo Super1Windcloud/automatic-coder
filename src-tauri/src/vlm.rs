@@ -198,6 +198,7 @@ async fn request_chat_completion_stream(
         .bearer_auth(api_key)
         .json(&body)
         .send();
+
     let mut res = timeout(Duration::from_secs(5), send_future)
         .await
         .map_err(|_| VlmError::Timeout("VLM 接口请求"))?
