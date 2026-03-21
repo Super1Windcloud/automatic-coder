@@ -9,13 +9,24 @@ use confy::load as load_config;
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_VLM_MODEL: &str = "zai-org/GLM-4.5V";
-pub const STEPFUN_VLM_MODEL: &str = "stepfun-ai/step3";
-
 pub fn alternate_vlm_model(current: &str) -> &'static str {
-    if current == DEFAULT_VLM_MODEL {
-        STEPFUN_VLM_MODEL
+    let _ = current;
+    DEFAULT_VLM_MODEL
+}
+
+fn sanitize_vlm_model(model: &str) -> String {
+    const ALLOWED_VLM_MODELS: &[&str] = &[
+        DEFAULT_VLM_MODEL,
+        "Qwen/Qwen3-VL-235B-A22B-Instruct",
+        "Qwen/Qwen3.5-122B-A10B",
+        "Qwen/Qwen3.5-397B-A17B",
+        "Pro/moonshotai/Kimi-K2.5",
+    ];
+
+    if ALLOWED_VLM_MODELS.contains(&model) {
+        model.to_string()
     } else {
-        DEFAULT_VLM_MODEL
+        DEFAULT_VLM_MODEL.to_string()
     }
 }
 
@@ -67,11 +78,7 @@ pub fn load_preferences(app: &mut App) {
         *state.capture_position.lock().unwrap() = preferences.direction_enum;
         {
             let mut model_guard = state.vlm_model.lock().unwrap();
-            if preferences.vlm_model.is_empty() {
-                *model_guard = DEFAULT_VLM_MODEL.to_string();
-            } else {
-                *model_guard = preferences.vlm_model.clone();
-            }
+            *model_guard = sanitize_vlm_model(&preferences.vlm_model);
         }
         if preferences.prompt.is_empty() {
             open_language_selector(app.handle())
@@ -106,6 +113,7 @@ pub fn set_vlm_model(state: State<AppState>, model: String) {
     if model.is_empty() {
         return;
     }
+    let model = sanitize_vlm_model(&model);
     {
         *state.vlm_model.lock().unwrap() = model.clone();
     }
@@ -113,21 +121,19 @@ pub fn set_vlm_model(state: State<AppState>, model: String) {
 }
 
 pub fn persist_vlm_model(app_handle: &AppHandle, model: &str) -> Result<(), String> {
-    if model.is_empty() {
-        return Ok(());
-    }
+    let model = sanitize_vlm_model(model);
     let state: State<AppState> = app_handle.state();
     *state
         .vlm_model
         .lock()
-        .map_err(|_| "模型状态锁获取失败".to_string())? = model.to_string();
-    persist_vlm_model_value(model)
+        .map_err(|_| "模型状态锁获取失败".to_string())? = model.clone();
+    persist_vlm_model_value(&model)
 }
 
 fn persist_vlm_model_value(model: &str) -> Result<(), String> {
     let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences")
         .map_err(|err| format!("加载配置失败: {err}"))?;
-    cfg.vlm_model = model.to_string();
+    cfg.vlm_model = sanitize_vlm_model(model);
     confy::store("interview-coder-config", "preferences", cfg)
         .map_err(|err| format!("保存配置失败: {err}"))
 }

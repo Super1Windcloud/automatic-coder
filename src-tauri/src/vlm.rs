@@ -70,8 +70,8 @@ impl VlmError {
     }
 }
 
-fn log_vlm_error(context: &str, err: &VlmError) {
-    app_error!("vlm", "{context}: {err}");
+fn log_vlm_error(context: &str, model: &str, err: &VlmError) {
+    app_error!("vlm", "{context}: model={model}, error={err}");
 }
 
 fn append_delta_field(app_handle: &AppHandle, field: Option<&Value>, buffer: &mut String) -> bool {
@@ -119,6 +119,7 @@ fn collect_plain_chunk(field: Option<&Value>) -> Option<String> {
     None
 }
 
+#[allow(unused)]
 fn append_plain_field(field: Option<&Value>, buffer: &mut String) -> Option<String> {
     if let Some(chunk) = collect_plain_chunk(field) {
         buffer.push_str(&chunk);
@@ -138,121 +139,13 @@ fn append_segment(app_handle: &AppHandle, buffer: &mut String, text: &str) -> bo
     true
 }
 
-#[allow(dead_code)]
-async fn request_chat_completion_stream_thinking(prompt: String, image_url: String) -> String {
-    let start_time = std::time::Instant::now();
-    let messages = json!([
-        {
-            "role": "system",
-            "content": prompt
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url,
-                        "detail": "high"
-                    }
-                }
-
-            ]
-        }
-    ]);
-
-    let api_key = get_env_key("SiliconflowVLM");
-    let client = Client::new();
-    let body = json!({
-        "model": "stepfun-ai/step3", // 16S
-        "thinking_budget" :1,
-        // "model": "zai-org/GLM-4.5V", // 3S
-        // "model" :"Qwen/Qwen3-VL-235B-A22B-Instruct", // 117S
-        "messages": messages,
-        "stream" :true
-    });
-
-    let mut res = client
-        .post("https://api.siliconflow.cn/v1/chat/completions")
-        .bearer_auth(api_key)
-        .json(&body)
-        .send()
-        .await
-        .expect("请求发送失败");
-
-    let mut result = String::new();
-    let mut reason = String::new();
-
-    while let Some(chunk) = res.chunk().await.expect("读取 chunk 失败") {
-        let text = String::from_utf8_lossy(&chunk);
-        app_debug!("vlm", "chunk: {}", text);
-        for line in text.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                if data.trim() == "[DONE]" {
-                    app_debug!("vlm", "流式完成事件");
-                    break;
-                }
-
-                if let Ok(json_chunk) = serde_json::from_str::<Value>(data) {
-                    if let Some(error) = json_chunk.get("error") {
-                        return format!("API错误: {}", error);
-                    }
-
-                    if let Some(choice) = json_chunk
-                        .get("choices")
-                        .and_then(|choices| choices.as_array())
-                        .and_then(|choices| choices.first())
-                    {
-                        let delta = choice.get("delta");
-                        let message = choice.get("message");
-
-                        if let Some(delta_obj) = delta {
-                            if let Some(added) =
-                                append_plain_field(delta_obj.get("content"), &mut result)
-                            {
-                                app_debug!("vlm", "content: {}", added);
-                            }
-                            if let Some(reasoning) =
-                                append_plain_field(delta_obj.get("reasoning_content"), &mut reason)
-                            {
-                                app_debug!("vlm", "reasoning_content: {}", reasoning);
-                            }
-                        }
-
-                        if let Some(message_obj) = message {
-                            if let Some(added) =
-                                append_plain_field(message_obj.get("content"), &mut result)
-                            {
-                                app_debug!("vlm", "content: {}", added);
-                            }
-                            if let Some(reasoning) = append_plain_field(
-                                message_obj.get("reasoning_content"),
-                                &mut reason,
-                            ) {
-                                app_debug!("vlm", "reasoning_content: {}", reasoning);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    app_debug!("vlm", "reason: {}", reason);
-    app_debug!("vlm", "result: {}", result);
-
-    let end_time = std::time::Instant::now();
-    calc_cost(prompt.len(), result.len());
-    app_info!("vlm", "time: {} s", (end_time - start_time).as_secs());
-    result
-}
 async fn request_chat_completion_stream(
     app_handle: &AppHandle,
     model: &str,
     prompt: String,
     image_url: String,
 ) -> Result<String, VlmError> {
-    app_debug!("vlm", "request model: {}", model);
+    app_info!("vlm", "request started with model: {model}");
     let messages = json!([
         {
             "role": "system",
@@ -276,19 +169,22 @@ async fn request_chat_completion_stream(
     let api_key = get_env_key("SiliconflowVLM");
     let client = Client::new();
 
-    let body = if model == "zai-org/GLM-4.5V" {
+    let body = if model == "zai-org/GLM-4.5V"
+        || model == "Qwen/Qwen3.5-122B-A10B"
+        || model == "Qwen/Qwen3.5-397B-A17B"
+        || model == "Pro/moonshotai/Kimi-K2.5"
+    {
         json!({
             "model": model,
             "stream": true,
             "messages": messages,
             "enable_thinking" :false
         })
-    } else if model == "stepfun-ai/step3" {
+    } else if model == "Qwen/Qwen3-VL-235B-A22B-Instruct" {
         json!({
             "model": model,
             "stream": true,
-            "messages": messages,
-            "thinking_budget" :1
+            "messages": messages
         })
     } else {
         json!(null)
@@ -351,18 +247,37 @@ async fn request_chat_completion_stream(
                     return Err(VlmError::Api(message));
                 }
 
-                let choice = json_chunk
+                let Some(choices) = json_chunk
                     .get("choices")
                     .and_then(|choices| choices.as_array())
-                    .and_then(|choices| choices.first())
-                    .ok_or_else(|| VlmError::StreamShape("响应缺少 choices 字段".into()))?;
+                else {
+                    return Err(VlmError::StreamShape(format!(
+                        "响应缺少 choices 字段，原始片段: {}",
+                        trimmed
+                    )));
+                };
+
+                if choices.is_empty() {
+                    app_debug!(
+                        "vlm",
+                        "skip empty choices chunk for model {}: {}",
+                        model,
+                        trimmed
+                    );
+                    continue;
+                }
+
+                let choice = choices.first().ok_or_else(|| {
+                    VlmError::StreamShape(format!("响应缺少 choices 字段，原始片段: {}", trimmed))
+                })?;
 
                 let delta = choice.get("delta");
                 let message = choice.get("message");
                 if delta.is_none() && message.is_none() {
-                    return Err(VlmError::StreamShape(
-                        "响应缺少 delta 或 message 字段".into(),
-                    ));
+                    return Err(VlmError::StreamShape(format!(
+                        "响应缺少 delta 或 message 字段，原始片段: {}",
+                        trimmed
+                    )));
                 }
 
                 let mut appended = false;
@@ -428,11 +343,17 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
             locked.clone()
         }
     };
-    match request_chat_completion_stream(&app_handle, &model_name, prompt.clone(), base64.clone()).await
+    app_info!("vlm", "create solution using model: {model_name}");
+    match request_chat_completion_stream(&app_handle, &model_name, prompt.clone(), base64.clone())
+        .await
     {
         Ok(result) => Ok(result),
         Err(err) if err.is_model_disabled() => {
             let fallback_model = alternate_vlm_model(&model_name).to_string();
+            if fallback_model == model_name {
+                log_vlm_error("request_chat_completion_stream", &model_name, &err);
+                return Err(format!("模型 {model_name}: {err}"));
+            }
             app_warn!(
                 "vlm",
                 "model {model_name} disabled, switching to fallback model {fallback_model}"
@@ -444,18 +365,24 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
             {
                 Ok(result) => Ok(result),
                 Err(retry_err) => {
-                    log_vlm_error("request_chat_completion_stream fallback", &retry_err);
-                    Err(retry_err.to_string())
+                    log_vlm_error(
+                        "request_chat_completion_stream fallback",
+                        &fallback_model,
+                        &retry_err,
+                    );
+                    Err(format!("模型 {fallback_model}: {retry_err}"))
                 }
             }
         }
         Err(err) => {
-            log_vlm_error("request_chat_completion_stream", &err);
-            Err(err.to_string())
+            log_vlm_error("request_chat_completion_stream", &model_name, &err);
+            Err(format!("模型 {model_name}: {err}"))
         }
     }
 }
 
+
+#[allow(unused)]
 trait ToF64 {
     fn to_f64(&self) -> f64;
 }
@@ -484,6 +411,7 @@ impl ToF64 for u32 {
     }
 }
 
+#[allow(unused)]
 fn calc_cost<T: ToF64, U: ToF64>(input_tokens: T, output_tokens: U) -> f64 {
     let input_price_per_m = 4.0; // ¥1 / M tokens
     let output_price_per_m = 10.0; // ¥6 / M tokens
@@ -493,20 +421,4 @@ fn calc_cost<T: ToF64, U: ToF64>(input_tokens: T, output_tokens: U) -> f64 {
         / 1_000_000.0;
     app_info!("vlm", "cost: {} ¥", result);
     result
-}
-
-///cargo test vlm::test_request_chat_completion_stream
-#[tokio::test]
-async fn test_request_chat_completion_stream() {
-    use dotenv::dotenv;
-    use std::path::Path;
-
-    dotenv().ok();
-    let image_path = Path::new("enc/test.png");
-    let image_bytes = std::fs::read(image_path).unwrap();
-    let base64 = general_purpose::STANDARD.encode(&image_bytes);
-    let prompt = "图中是什么";
-    let base64 = format!("data:image/png;base64,{}", base64);
-
-    request_chat_completion_stream_thinking(prompt.into(), base64).await;
 }
