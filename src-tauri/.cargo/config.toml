@@ -5,5 +5,15 @@ linker = "arm-linux-gnueabihf-gcc"
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
+[target.x86_64-pc-windows-msvc]
+# 1. 移除 -Ctarget-cpu=native
+# 2. 强制静态链接 C 运行时 (CRT)，解决缺少 vcruntime140.dll 的问题
+# 3. 锁定 v2 指令集（支持大部分 2010 年后的 CPU），或者干脆不写（最稳）
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "target-cpu=x86-64-v2"
+]
+
 [build]
-rustflags = ["-Ctarget-cpu=native"]
+# 如果你想极致兼容（甚至支持不支持 AVX 的老 CPU），将下面改为 generic
+rustflags = ["-C", "target-cpu=generic"]
