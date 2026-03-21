@@ -16,11 +16,7 @@ use tauri::{
 };
 use tempfile::NamedTempFile;
 
-use crate::{
-    app_debug, app_info, app_warn,
-    system::register_activation_shortcut,
-    utils::is_dev,
-};
+use crate::{app_debug, app_info, app_warn, system::register_activation_shortcut, utils::is_dev};
 const REMOTE_ACTIVATION_FILE: &str = "activation_codes.enc";
 const DEFAULT_ACTIVATION_REMOTE_URL: &str = "https://raw.githubusercontent.com/Super1Windcloud/automatic-coder/refs/heads/master/src-tauri/enc/activation_codes.enc";
 const ACTIVATION_STATUS_FILE: [&str; 2] = [
@@ -236,12 +232,18 @@ pub fn prepare_activation_repository(
         .ok()
         .or_else(|| option_env!("ACTIVATION_MASTER_KEY").map(|value| value.to_string()))
     else {
-        app_warn!("license", "activation system disabled: missing ACTIVATION_MASTER_KEY");
+        app_warn!(
+            "license",
+            "activation system disabled: missing ACTIVATION_MASTER_KEY"
+        );
         return Ok(None);
     };
 
     if key.trim().is_empty() {
-        app_warn!("license", "activation system disabled: empty ACTIVATION_MASTER_KEY");
+        app_warn!(
+            "license",
+            "activation system disabled: empty ACTIVATION_MASTER_KEY"
+        );
         return Ok(None);
     }
 
@@ -569,7 +571,10 @@ impl RemoteActivationLock {
         } = self;
 
         if !config.raw_url.trim().is_empty() {
-            app_info!("license", "activation payload is read-only; skipping remote refresh");
+            app_info!(
+                "license",
+                "activation payload is read-only; skipping remote refresh"
+            );
             return Ok(());
         }
 

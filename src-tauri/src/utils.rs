@@ -1,6 +1,7 @@
 use crate::config::PreferencesConfig;
 use confy::load as load_config;
 use std::env;
+use std::fs::{self, OpenOptions};
 use tauri::{AppHandle, Manager};
 
 #[macro_export]
@@ -59,6 +60,24 @@ pub fn toggle_webview_devtools(app: &AppHandle) {
 
 pub fn is_dev() -> bool {
     cfg!(debug_assertions)
+}
+
+pub fn clear_app_log(app: &AppHandle) -> Result<(), String> {
+    let log_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|err| format!("failed to resolve app local data dir: {err}"))?
+        .join("logs");
+    fs::create_dir_all(&log_dir).map_err(|err| format!("failed to prepare log dir: {err}"))?;
+
+    let log_path = log_dir.join("Interview-Coder.log");
+    OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&log_path)
+        .map_err(|err| format!("failed to clear log file {}: {err}", log_path.display()))?;
+    Ok(())
 }
 
 #[test]

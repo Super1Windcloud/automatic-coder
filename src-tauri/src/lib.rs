@@ -78,6 +78,11 @@ pub fn run() {
             submit_activation_code
         ])
         .setup(|app| {
+            if let Err(err) = clear_app_log(app.handle()) {
+                eprintln!("failed to clear startup log file: {err}");
+            } else {
+                app_info!("app", "startup log file cleared");
+            }
             create_tray_icon(app);
             create_shortcut(app);
             load_preferences(app);

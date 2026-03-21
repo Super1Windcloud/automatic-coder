@@ -1,12 +1,13 @@
 #![allow(clippy::collapsible_if)]
 
+use crate::capture::capture_screen_png_bytes;
 use crate::config::{AppState, DEFAULT_VLM_MODEL};
 use crate::utils::get_env_key;
 use crate::{app_debug, app_error, app_info};
 use base64::{Engine, engine::general_purpose};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-use std::{fmt, path::Path};
+use std::fmt;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{Duration, timeout};
 
@@ -391,52 +392,36 @@ async fn request_chat_completion_stream(
 
 #[tauri::command]
 pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<String, String> {
-    let assets_path = if cfg!(target_os = "windows") {
-        Path::new("assets").to_path_buf()
-    } else if cfg!(target_os = "macos") {
-        let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
-        let assets = log_dir.join("assets");
-        assets.to_path_buf()
-    } else {
-        app_error!("vlm", "unknown platform to support");
-        std::process::exit(1);
-    };
     let state = app_handle.state::<AppState>();
     let prompt = state.prompt.lock().unwrap().clone();
-    app_info!("vlm", "assets path: {}", assets_path.display());
-    let entries: Vec<_> = std::fs::read_dir(&assets_path)
-        .map_err(|err| format!("读取资源目录失败: {err}"))?
-        .filter_map(Result::ok)
-        .filter(|e| {
-            let path = e.path();
-            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-            matches!(ext, "png" | "jpg" | "jpeg")
-        })
-        .collect();
+    let direction = *state
+        .capture_position
+        .lock()
+        .map_err(|_| "capture position lock poisoned".to_string())?;
+    let bytes = capture_screen_png_bytes(direction)?;
+    app_info!(
+        "vlm",
+        "using in-memory screenshot {} bytes ({:.2} KiB)",
+        bytes.len(),
+        bytes.len() as f64 / 1024.0
+    );
 
-    if let Some(first_image) = entries.first() {
-        app_info!("vlm", "using image: {}", first_image.path().display());
-        let bytes =
-            std::fs::read(first_image.path()).map_err(|err| format!("读取图片失败: {err}"))?;
-        let base64_str = general_purpose::STANDARD.encode(&bytes);
-        let base64 = format!("data:image/png;base64,{}", base64_str);
-        let model_name = {
-            let locked = state.vlm_model.lock().unwrap();
-            if locked.is_empty() {
-                DEFAULT_VLM_MODEL.to_string()
-            } else {
-                locked.clone()
-            }
-        };
-        match request_chat_completion_stream(&app_handle, &model_name, prompt, base64).await {
-            Ok(result) => Ok(result),
-            Err(err) => {
-                log_vlm_error("request_chat_completion_stream", &err);
-                Err(err.to_string())
-            }
+    let base64_str = general_purpose::STANDARD.encode(&bytes);
+    let base64 = format!("data:image/png;base64,{}", base64_str);
+    let model_name = {
+        let locked = state.vlm_model.lock().unwrap();
+        if locked.is_empty() {
+            DEFAULT_VLM_MODEL.to_string()
+        } else {
+            locked.clone()
         }
-    } else {
-        Err("没有找到图片文件".to_string())
+    };
+    match request_chat_completion_stream(&app_handle, &model_name, prompt, base64).await {
+        Ok(result) => Ok(result),
+        Err(err) => {
+            log_vlm_error("request_chat_completion_stream", &err);
+            Err(err.to_string())
+        }
     }
 }
 
@@ -483,6 +468,7 @@ fn calc_cost<T: ToF64, U: ToF64>(input_tokens: T, output_tokens: U) -> f64 {
 #[tokio::test]
 async fn test_request_chat_completion_stream() {
     use dotenv::dotenv;
+    use std::path::Path;
 
     dotenv().ok();
     let image_path = Path::new("enc/test.png");

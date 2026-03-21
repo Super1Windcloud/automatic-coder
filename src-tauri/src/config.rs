@@ -3,8 +3,8 @@
 use std::sync::Mutex;
 use tauri::{App, AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
-use crate::{app_info, app_warn};
 use crate::utils::is_dev;
+use crate::{app_info, app_warn};
 use confy::load as load_config;
 use serde::{Deserialize, Serialize};
 

@@ -81,6 +81,9 @@ export async function getScreenCaptureToBlobUrl(source: string = '截图') {
   try {
     logger.info(`${source} 请求开始`)
     const bytes = await invoke<number[]>('get_screen_capture_to_bytes')
+    logger.info(
+      `${source} 返回图片 ${bytes.length} bytes (${(bytes.length / 1024).toFixed(2)} KiB)`,
+    )
     const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' })
     const url = URL.createObjectURL(blob)
     useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath(url)

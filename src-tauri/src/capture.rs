@@ -81,21 +81,15 @@ fn get_capture_direction(states: &State<AppState>) -> Result<DirectionEnum, Stri
         .map_err(|_| "capture position lock poisoned".to_string())
 }
 
-#[tauri::command]
-pub fn get_screen_capture_to_bytes(
-    states: State<AppState>,
-    _app: tauri::AppHandle,
-) -> Result<Vec<u8>, String> {
-    app_info!("capture", "capture_bytes: begin");
+pub(crate) fn capture_screen_png_bytes(direction: DirectionEnum) -> Result<Vec<u8>, String> {
     let monitor = get_primary_monitor()?;
     let (monitor_width, monitor_height) = get_monitor_dimensions(&monitor)?;
     app_info!(
         "capture",
         "capture_bytes: monitor {}x{}",
-        monitor_width, monitor_height
+        monitor_width,
+        monitor_height
     );
-
-    let direction = get_capture_direction(&states)?;
     app_info!("capture", "capture_bytes: direction {:?}", direction);
 
     let (x, y, w, h) = get_region(monitor_width, monitor_height, &direction);
@@ -105,71 +99,32 @@ pub fn get_screen_capture_to_bytes(
         .map_err(|err| format!("capture_region failed: {err}"))?;
     app_info!("capture", "capture_bytes: region captured");
 
-    #[cfg(target_os = "windows")]
-    {
-        let assets_dir = capture_assets_dir()?;
-        if let Err(err) = dir::create_all(assets_dir.as_path(), false) {
-            let message = format!("failed to create assets directory: {err}");
-            app_error!("capture", "{message}");
-            return Err(message);
-        }
-
-        let monitor_name = monitor.name().unwrap_or_else(|_| "unknown".to_string());
-        let file_name = format!("monitor-{}-{:?}.png", normalized(monitor_name), &direction);
-        let file_path = assets_dir.join(file_name);
-        if should_skip_save() {
-            app_info!(
-                "capture",
-                "capture_bytes: skip save (CAPTURE_SKIP_SAVE=1) {}",
-                file_path.display()
-            );
-        } else {
-            app_info!("capture", "capture_bytes: save {}", file_path.display());
-            if let Err(err) = image.save(&file_path) {
-                let message = format!("failed to save capture: {err}");
-                app_error!("capture", "{message}");
-                return Err(message);
-            }
-        }
-        let mut buf = Cursor::new(Vec::new());
-        app_info!("capture", "capture_bytes: encoding png");
-        if let Err(err) = image.write_to(&mut buf, ImageFormat::Png) {
-            let message = format!("failed to encode capture: {err}");
-            app_error!("capture", "{message}");
-            return Err(message);
-        }
-        Ok(buf.into_inner())
+    let mut buf = Cursor::new(Vec::new());
+    app_info!("capture", "capture_bytes: encoding png");
+    if let Err(err) = image.write_to(&mut buf, ImageFormat::Png) {
+        let message = format!("failed to encode capture: {err}");
+        app_error!("capture", "{message}");
+        return Err(message);
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        let log_dir = dirs::data_dir().unwrap().join("interview_coder_app");
-        let assets = log_dir.join("assets");
-        if let Err(err) = dir::create_all(assets.as_path(), false) {
-            let message = format!("failed to create assets directory: {err}");
-            app_error!("capture", "{message}");
-            return Err(message);
-        }
+    let bytes = buf.into_inner();
+    let size_kib = bytes.len() as f64 / 1024.0;
+    app_info!(
+        "capture",
+        "capture_bytes: payload size {} bytes ({size_kib:.2} KiB)",
+        bytes.len()
+    );
+    Ok(bytes)
+}
 
-        let monitor_name = monitor.name().unwrap_or_else(|| "unknown".to_string());
-        let file_path = format!("monitor-{}-{:?}.png", normalized(monitor_name), &direction);
-        let file_path = assets.join(file_path);
-        app_info!("capture", "capture_bytes: save {}", file_path.display());
-
-        if let Err(err) = image.save(&file_path) {
-            let message = format!("failed to save capture: {err}");
-            app_error!("capture", "{message}");
-            return Err(message);
-        }
-        let mut buf = Cursor::new(Vec::new());
-        app_info!("capture", "capture_bytes: encoding png");
-        if let Err(err) = image.write_to(&mut buf, ImageFormat::Png) {
-            let message = format!("failed to encode capture: {err}");
-            app_error!("capture", "{message}");
-            return Err(message);
-        }
-        Ok(buf.into_inner())
-    }
+#[tauri::command]
+pub fn get_screen_capture_to_bytes(
+    states: State<AppState>,
+    _app: tauri::AppHandle,
+) -> Result<Vec<u8>, String> {
+    app_info!("capture", "capture_bytes: begin");
+    let direction = get_capture_direction(&states)?;
+    capture_screen_png_bytes(direction)
 }
 
 #[tauri::command]
@@ -199,7 +154,8 @@ pub fn get_screen_capture_to_path(states: State<AppState>) -> Result<String, Str
     app_info!(
         "capture",
         "capture_path: monitor {}x{}",
-        monitor_width, monitor_height
+        monitor_width,
+        monitor_height
     );
 
     let direction = get_capture_direction(&states)?;
