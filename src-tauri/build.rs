@@ -1,11 +1,12 @@
 use std::fs;
 
-const EMBED_KEYS: [&str; 5] = [
+const EMBED_KEYS: [&str; 6] = [
     "ACTIVATION_MASTER_KEY",
     "ACTIVATION_REMOTE_TOKEN",
     "ACTIVATION_REMOTE_OWNER",
     "ACTIVATION_REMOTE_REPO",
     "ACTIVATION_REMOTE_TAG",
+    "CAPTURE_SKIP_SAVE",
 ];
 
 fn main() {

@@ -13,7 +13,7 @@ fn print_usage() {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().unwrap();
+    dotenv()?;
 
     let mut args = env::args().skip(1);
     let Some(dir) = args.next() else {

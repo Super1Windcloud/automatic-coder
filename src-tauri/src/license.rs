@@ -394,12 +394,12 @@ fn derive_activation_fingerprint(activation_code: &str) -> String {
 fn collect_machine_signature() -> String {
     let mut parts = Vec::new();
 
-    let hostname = whoami::fallible::hostname().unwrap();
+    let hostname = whoami::hostname().unwrap_or_default();
     if !hostname.is_empty() {
         parts.push(hostname);
     }
 
-    let username = whoami::username();
+    let username = whoami::username().unwrap_or_default();
     if !username.is_empty() {
         parts.push(username);
     }
@@ -409,12 +409,12 @@ fn collect_machine_signature() -> String {
         parts.push(platform);
     }
 
-    let arch = whoami::arch().to_string();
+    let arch = whoami::cpu_arch().to_string();
     if !arch.is_empty() {
         parts.push(arch);
     }
 
-    let distro = whoami::distro();
+    let distro = whoami::distro().unwrap_or_default();
     if !distro.is_empty() {
         parts.push(distro);
     }
@@ -512,6 +512,7 @@ const GITHUB_API_BASE: &str = "https://api.github.com";
 struct RemoteActivationLock {
     config: RemoteActivationConfig,
     client: Client,
+    #[allow(dead_code)]
     release_id: Option<u64>,
     asset_id: Option<u64>,
     file_name: String,
