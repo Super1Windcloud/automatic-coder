@@ -6,7 +6,7 @@
       "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.11/Interview-Coder_1.0.11_x64-setup.exe"
     },
     "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkFEYTdQSmY2UVJEaVF0TTQrWDM4eHZpUHk3aUdsS29mUCtTNmNhT3VMcEx2ckwyOW9GUGcvM3lMMlhwZURYQzBwL2tVUlVQUGdUK0FndnhrU1AxVWdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0NTgzODc4CWZpbGU6SW50ZXJ2aWV3LUNvZGVyLmFwcC50YXIuZ3oKZE5wU0lWS1FxN3lrZGx1UU95dlBsRGFWU0dYaG1ZNlhrdXV4MlRDbE1JVjNQcExFNTdUak14dy9TNE9RS2NoOTR5cld5WXdHWFFyTVdxZjl0SEpRQkE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkM5bHNsSnlqMlc2SmVKZ1NHOEpkYUo5NWFpNkRaYWgwQ1Y1TjR2OFA0SElYNUlLc3R0a3pQalA5Q0xpWnhaY3dGLytGcHJWWjlXVXFPd1h0QXQ4Zmc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0NTg2NjM0CWZpbGU6SW50ZXJ2aWV3LUNvZGVyLmFwcC50YXIuZ3oKWVRrMzFNcWR6emRtOCtwTzRsQ09IOU1kUmZGUFJiZGdJOGNsRlZlZm53bXBRa0U1K3VaU1NXM2s2WU9nMzZLa2hFY2VhMDlVS0E1YWE5Y1dzRTdSREE9PQo=",
       "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.11/Interview-Coder.app.tar.gz"
     },
     "linux-x86_64": {
@@ -14,7 +14,7 @@
       "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.7/Interview-Coder_1.0.7_x64-setup.exe"
     },
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkFEYTdQSmY2UVJEaVF0TTQrWDM4eHZpUHk3aUdsS29mUCtTNmNhT3VMcEx2ckwyOW9GUGcvM3lMMlhwZURYQzBwL2tVUlVQUGdUK0FndnhrU1AxVWdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0NTgzODc4CWZpbGU6SW50ZXJ2aWV3LUNvZGVyLmFwcC50YXIuZ3oKZE5wU0lWS1FxN3lrZGx1UU95dlBsRGFWU0dYaG1ZNlhrdXV4MlRDbE1JVjNQcExFNTdUak14dy9TNE9RS2NoOTR5cld5WXdHWFFyTVdxZjl0SEpRQkE9PQo=",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkM5bHNsSnlqMlc2SmVKZ1NHOEpkYUo5NWFpNkRaYWgwQ1Y1TjR2OFA0SElYNUlLc3R0a3pQalA5Q0xpWnhaY3dGLytGcHJWWjlXVXFPd1h0QXQ4Zmc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0NTg2NjM0CWZpbGU6SW50ZXJ2aWV3LUNvZGVyLmFwcC50YXIuZ3oKWVRrMzFNcWR6emRtOCtwTzRsQ09IOU1kUmZGUFJiZGdJOGNsRlZlZm53bXBRa0U1K3VaU1NXM2s2WU9nMzZLa2hFY2VhMDlVS0E1YWE5Y1dzRTdSREE9PQo=",
       "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.11/Interview-Coder.app.tar.gz"
     }
   }
