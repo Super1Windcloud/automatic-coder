@@ -24,6 +24,8 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:app:allow-version",
+    "process:default",
+    "process:allow-restart",
     "core:window:allow-set-focus",
     "core:window:allow-inner-size",
     "updater:default",

@@ -4,6 +4,7 @@ import {
   LogicalSize,
 } from '@tauri-apps/api/window'
 import { register } from '@tauri-apps/plugin-global-shortcut'
+import { createScopedLogger } from '@/lib/logger.ts'
 import {
   getScreenCaptureToBlobUrl,
   resetWindow,
@@ -17,11 +18,23 @@ let windowY = 0
 let lastX = 0
 let lastY = 0
 let toggleFlag = false
+const logger = createScopedLogger('shortcut')
 const result = await getCurrentWindow().innerPosition()
 ;[windowX, windowY] = [result.x, result.y]
 
+async function registerShortcut(
+  shortcut: string,
+  handler: Parameters<typeof register>[1],
+) {
+  try {
+    await register(shortcut, handler)
+  } catch (err) {
+    logger.warn(`register shortcut failed: ${shortcut}`, err)
+  }
+}
+
 export async function registryGlobalShortcut() {
-  await register('Alt+`', (event) => {
+  await registerShortcut('Alt+`', (event) => {
     if (event.state === 'Released') {
       resetWindow(async () => {
         lastX = lastY = 0
@@ -31,7 +44,7 @@ export async function registryGlobalShortcut() {
     }
   })
 
-  await register('Alt+2', async (event) => {
+  await registerShortcut('Alt+2', async (event) => {
     if (event.state === 'Released') {
       const result = await getCurrentWindow().innerPosition()
       ;[lastX, lastY] = [result.x, result.y]
@@ -40,7 +53,7 @@ export async function registryGlobalShortcut() {
     }
   })
 
-  await register('Alt+1', async (event) => {
+  await registerShortcut('Alt+1', async (event) => {
     if (event.state === 'Released') {
       if (useAppStateStoreWithNoHook.getState().currentScreenShotPath) {
         await getCurrentWindow().setSize(new LogicalSize(800, 50))
@@ -53,7 +66,7 @@ export async function registryGlobalShortcut() {
     }
   })
 
-  await register('Alt+Up', async (event) => {
+  await registerShortcut('Alt+Up', async (event) => {
     if (event.state === 'Released') {
       if (useAppStateStoreWithNoHook.getState().startShowSolution) {
         toggleFlag = false
@@ -69,7 +82,7 @@ export async function registryGlobalShortcut() {
     }
   })
 
-  await register('Alt+Down', async (event) => {
+  await registerShortcut('Alt+Down', async (event) => {
     if (event.state === 'Released')
       if (useAppStateStoreWithNoHook.getState().startShowSolution) {
         toggleFlag = false
@@ -84,7 +97,7 @@ export async function registryGlobalShortcut() {
       }
   })
 
-  await register('Alt+Left', async (event) => {
+  await registerShortcut('Alt+Left', async (event) => {
     if (event.state === 'Released') {
       if (!toggleFlag) {
         const result = await getCurrentWindow().innerPosition()
@@ -95,13 +108,13 @@ export async function registryGlobalShortcut() {
       await moveWindow('left')
     }
   })
-  await register('CommandOrControl+F11', async (event) => {
+  await registerShortcut('CommandOrControl+F11', async (event) => {
     if (event.state === 'Released') {
       await checkCurrentAppUpdate()
     }
   })
 
-  await register('Alt+Right', async (event) => {
+  await registerShortcut('Alt+Right', async (event) => {
     if (event.state === 'Released') {
       if (!toggleFlag) {
         const result = await getCurrentWindow().innerPosition()

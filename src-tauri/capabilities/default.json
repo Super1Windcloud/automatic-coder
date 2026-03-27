@@ -13,6 +13,8 @@
   "permissions": [
     "core:default",
     "core:app:allow-version",
+    "process:default",
+    "process:allow-restart",
     "opener:default",
     "notification:default",
     "log:default"
