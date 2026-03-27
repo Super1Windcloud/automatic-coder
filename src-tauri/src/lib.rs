@@ -74,6 +74,7 @@ pub fn run() {
             create_screenshot_solution_stream,
             set_vlm_key,
             set_vlm_model,
+            set_page_opacity,
             get_activation_status,
             submit_activation_code
         ])

@@ -8,6 +8,7 @@ export function MarkdownPreview({ content }: { content: string }) {
         padding: 16,
         scrollbarWidth: 'none',
         backgroundColor: 'transparent',
+        color: 'var(--page-text-color, inherit)',
       }}
     />
   )

@@ -1,10 +1,10 @@
 [package]
 name = "interview-coder"
-version = "1.0.10"
+version = "1.0.11"
 description = "A Tauri App for interview coder"
 authors = ["Superwindcloud <<117893440@qq.com>>"]
 edition = "2024"
-rust-version = "1.91.0"
+rust-version = "1.94.0"
 
 
 [workspace]

@@ -1,7 +1,7 @@
 #![allow(clippy::let_and_return)]
 
 use std::sync::Mutex;
-use tauri::{App, AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{App, AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::utils::is_dev;
 use crate::{app_info, app_warn};
@@ -36,6 +36,7 @@ pub struct PreferencesConfig {
     direction_enum: DirectionEnum,
     code_language: String,
     prompt: String,
+    pub page_opacity: f64,
     pub vlm_key: String,
     pub vlm_model: String,
 }
@@ -46,6 +47,7 @@ impl Default for PreferencesConfig {
             direction_enum: DirectionEnum::default(),
             code_language: "TypeScript".into(),
             prompt: String::new(),
+            page_opacity: 1.0,
             vlm_key: String::new(),
             vlm_model: DEFAULT_VLM_MODEL.into(),
         }
@@ -56,6 +58,7 @@ impl Default for PreferencesConfig {
 pub struct AppState {
     pub(crate) prompt: Mutex<String>,
     pub(crate) capture_position: Mutex<DirectionEnum>,
+    pub(crate) page_opacity: Mutex<f64>,
     pub(crate) vlm_model: Mutex<String>,
 }
 
@@ -77,6 +80,10 @@ pub fn load_preferences(app: &mut App) {
         let state: State<AppState> = app.state();
         *state.capture_position.lock().unwrap() = preferences.direction_enum;
         {
+            let mut opacity_guard = state.page_opacity.lock().unwrap();
+            *opacity_guard = sanitize_page_opacity(preferences.page_opacity);
+        }
+        {
             let mut model_guard = state.vlm_model.lock().unwrap();
             *model_guard = sanitize_vlm_model(&preferences.vlm_model);
         }
@@ -96,6 +103,39 @@ pub fn get_store_config() -> String {
     let result: PreferencesConfig = load_config("interview-coder-config", "preferences").unwrap();
     let result_str = serde_json::to_string(&result).unwrap();
     result_str
+}
+
+fn sanitize_page_opacity(opacity: f64) -> f64 {
+    opacity.clamp(0.2, 1.0)
+}
+
+fn persist_page_opacity_value(opacity: f64) -> Result<(), String> {
+    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences")
+        .map_err(|err| format!("加载配置失败: {err}"))?;
+    cfg.page_opacity = sanitize_page_opacity(opacity);
+    confy::store("interview-coder-config", "preferences", cfg)
+        .map_err(|err| format!("保存配置失败: {err}"))
+}
+
+pub fn persist_page_opacity(app_handle: &AppHandle, opacity: f64) -> Result<f64, String> {
+    let opacity = sanitize_page_opacity(opacity);
+    let state: State<AppState> = app_handle.state();
+    *state
+        .page_opacity
+        .lock()
+        .map_err(|_| "透明度状态锁获取失败".to_string())? = opacity;
+
+    persist_page_opacity_value(opacity)?;
+    app_handle
+        .emit("page-opacity-changed", opacity)
+        .map_err(|err| format!("广播透明度变更失败: {err}"))?;
+
+    Ok(opacity)
+}
+
+#[tauri::command]
+pub fn set_page_opacity(app_handle: AppHandle, opacity: f64) -> Result<f64, String> {
+    persist_page_opacity(&app_handle, opacity)
 }
 
 #[tauri::command]

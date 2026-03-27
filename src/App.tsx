@@ -18,6 +18,20 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 const logger = createScopedLogger("app");
 
+function applyPageOpacity(opacity: number) {
+  const normalized = Math.min(Math.max(opacity, 0.2), 1);
+  document.documentElement.style.opacity = `${normalized}`;
+  document.body.style.opacity = "1";
+  document.documentElement.style.setProperty(
+    "--page-text-color",
+    normalized < 0.6 ? "#000000" : "#f4f4f5",
+  );
+  document.documentElement.style.setProperty(
+    "--page-header-text-color",
+    normalized < 0.6 ? "#000000" : "lightgrey",
+  );
+}
+
 const MainApp = ({
   hasSolution,
   setHasSolution,
@@ -73,6 +87,7 @@ function App() {
 
   useEffect(() => {
     let unlistenActivation: UnlistenFn | null = null;
+    let unlistenOpacity: UnlistenFn | null = null;
 
     const registerShortcuts = async () => {
       if (hasRegistered.current) {
@@ -109,6 +124,23 @@ function App() {
     ignoreMouseEvents("main").catch((err) => {
       logger.error("mouse err", err);
     });
+    invoke<string>("get_store_config")
+      .then((configStr) => {
+        const config = JSON.parse(configStr) as { page_opacity?: number };
+        applyPageOpacity(config.page_opacity ?? 1);
+      })
+      .catch((err) => {
+        logger.error("load page opacity err", err);
+      });
+    listen<number>("page-opacity-changed", (event) => {
+      applyPageOpacity(event.payload);
+    })
+      .then((unlisten) => {
+        unlistenOpacity = unlisten;
+      })
+      .catch((err) => {
+        logger.error("listen page opacity err", err);
+      });
     waitForActivationAndRegister().catch((err) => {
       logger.error("wait activation err", err);
     });
@@ -117,6 +149,10 @@ function App() {
       if (unlistenActivation) {
         unlistenActivation();
         unlistenActivation = null;
+      }
+      if (unlistenOpacity) {
+        unlistenOpacity();
+        unlistenOpacity = null;
       }
     };
   }, []);

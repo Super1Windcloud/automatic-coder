@@ -1,8 +1,8 @@
-use crate::config::{open_language_selector, toggle_vlm_model};
+use crate::config::{open_language_selector, persist_page_opacity, toggle_vlm_model};
 use crate::utils::{is_dev, toggle_webview_devtools};
 use crate::{app_debug, app_error, app_info};
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Manager, Position, Wry};
 use tauri_plugin_dialog::DialogExt;
@@ -209,8 +209,52 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
     let toggle_model =
         MenuItem::with_id(app, "toggle_model", "切换模型", true, Some("Alt+4")).unwrap();
     let about_item = MenuItem::with_id(app, "about", "关于", true, Some("")).unwrap();
-    let menu =
-        Menu::with_items(app, &[&about_item, &code_language, &toggle_model, &quit_i]).unwrap();
+    let opacity_100 = MenuItem::with_id(app, "page_opacity_100", "100%", true, None::<&str>)
+        .unwrap();
+    let opacity_90 =
+        MenuItem::with_id(app, "page_opacity_90", "90%", true, None::<&str>).unwrap();
+    let opacity_80 =
+        MenuItem::with_id(app, "page_opacity_80", "80%", true, None::<&str>).unwrap();
+    let opacity_70 =
+        MenuItem::with_id(app, "page_opacity_70", "70%", true, None::<&str>).unwrap();
+    let opacity_60 =
+        MenuItem::with_id(app, "page_opacity_60", "60%", true, None::<&str>).unwrap();
+    let opacity_50 =
+        MenuItem::with_id(app, "page_opacity_50", "50%", true, None::<&str>).unwrap();
+    let opacity_40 =
+        MenuItem::with_id(app, "page_opacity_40", "40%", true, None::<&str>).unwrap();
+    let opacity_30 =
+        MenuItem::with_id(app, "page_opacity_30", "30%", true, None::<&str>).unwrap();
+    let opacity_20 =
+        MenuItem::with_id(app, "page_opacity_20", "20%", true, None::<&str>).unwrap();
+    let page_opacity_submenu = Submenu::with_items(
+        app,
+        "页面透明度",
+        true,
+        &[
+            &opacity_100,
+            &opacity_90,
+            &opacity_80,
+            &opacity_70,
+            &opacity_60,
+            &opacity_50,
+            &opacity_40,
+            &opacity_30,
+            &opacity_20,
+        ],
+    )
+    .unwrap();
+    let menu = Menu::with_items(
+        app,
+        &[
+            &about_item,
+            &code_language,
+            &toggle_model,
+            &page_opacity_submenu,
+            &quit_i,
+        ],
+    )
+    .unwrap();
 
     TrayIconBuilder::new()
         .menu(&menu)
@@ -247,6 +291,15 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                     }
                 }
             },
+            "page_opacity_100" => apply_page_opacity_from_tray(app, 1.0),
+            "page_opacity_90" => apply_page_opacity_from_tray(app, 0.9),
+            "page_opacity_80" => apply_page_opacity_from_tray(app, 0.8),
+            "page_opacity_70" => apply_page_opacity_from_tray(app, 0.7),
+            "page_opacity_60" => apply_page_opacity_from_tray(app, 0.6),
+            "page_opacity_50" => apply_page_opacity_from_tray(app, 0.5),
+            "page_opacity_40" => apply_page_opacity_from_tray(app, 0.4),
+            "page_opacity_30" => apply_page_opacity_from_tray(app, 0.3),
+            "page_opacity_20" => apply_page_opacity_from_tray(app, 0.2),
             "about" => show_about_dialog(app),
             _ => {}
         })
@@ -267,4 +320,26 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         })
         .build(app)
         .unwrap();
+}
+
+fn apply_page_opacity_from_tray(app: &AppHandle, opacity: f64) {
+    match persist_page_opacity(app, opacity) {
+        Ok(value) => {
+            app_info!("system", "page opacity changed to {}", value);
+            if is_dev() {
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title("Tauri")
+                    .body(format!("页面透明度已调整为 {}%", (value * 100.0) as i32))
+                    .show();
+            }
+        }
+        Err(err) => {
+            app_error!("system", "{err}");
+            if is_dev() {
+                let _ = app.notification().builder().title("Tauri").body(err).show();
+            }
+        }
+    }
 }
