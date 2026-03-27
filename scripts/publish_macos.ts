@@ -134,6 +134,28 @@ async function uploadAsset(
   }
 }
 
+function getMacosDmgPath() {
+  const dmgDir = process.cwd() + "/bundle/dmg";
+  const dmgFile = fs
+    .readdirSync(dmgDir)
+    .find((file) => file.endsWith(".dmg"));
+
+  if (!dmgFile) {
+    throw new Error("No dmg file found under bundle/dmg");
+  }
+
+  if (!dmgFile.includes(pkg.version)) {
+    throw new Error(
+      `DMG file name must include version ${pkg.version}, got ${dmgFile}`,
+    );
+  }
+
+  return {
+    fileName: dmgFile,
+    filePath: `${dmgDir}/${dmgFile}`,
+  };
+}
+
 async function getOrCreateRelease() {
   const releasesUrl = `https://api.github.com/repos/${owner}/${repo}/releases`;
   try {
@@ -189,11 +211,15 @@ async function deleteExistingAsset(release: any, fileName: string) {
   await updateJsonFile(json, sha);
 
   const release = await getOrCreateRelease();
-  const fileName = `Interview-Coder.app.tar.gz`;
-  await deleteExistingAsset(release, fileName);
+  const updaterFileName = `Interview-Coder.app.tar.gz`;
+  await deleteExistingAsset(release, updaterFileName);
   await uploadAsset(
     release.upload_url,
-    process.cwd() + `/bundle/macos/${fileName}`,
-    fileName,
+    process.cwd() + `/bundle/macos/${updaterFileName}`,
+    updaterFileName,
   );
+
+  const dmgAsset = getMacosDmgPath();
+  await deleteExistingAsset(release, dmgAsset.fileName);
+  await uploadAsset(release.upload_url, dmgAsset.filePath, dmgAsset.fileName);
 })();
