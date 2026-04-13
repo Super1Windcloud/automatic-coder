@@ -76,6 +76,7 @@ pub fn run() {
             set_vlm_key,
             set_vlm_model,
             set_page_opacity,
+            set_background_broadcast,
             get_activation_status,
             submit_activation_code
         ])

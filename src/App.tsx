@@ -12,6 +12,7 @@ import { createScopedLogger } from "@/lib/logger.ts";
 import { registryGlobalShortcut } from "@/lib/shortcut.ts";
 import { ignoreMouseEvents } from "@/lib/system.ts";
 import UpdateWindow from "@/pages/UpdateWindow.tsx";
+import { useAppStateStoreWithNoHook } from "@/store";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -88,6 +89,7 @@ function App() {
   useEffect(() => {
     let unlistenActivation: UnlistenFn | null = null;
     let unlistenOpacity: UnlistenFn | null = null;
+    let unlistenBackgroundBroadcast: UnlistenFn | null = null;
 
     const registerShortcuts = async () => {
       if (hasRegistered.current) {
@@ -132,6 +134,18 @@ function App() {
       .catch((err) => {
         logger.error("load page opacity err", err);
       });
+    invoke<string>("get_store_config")
+      .then((configStr) => {
+        const config = JSON.parse(configStr) as {
+          background_broadcast?: boolean;
+        };
+        useAppStateStoreWithNoHook
+          .getState()
+          .updateBackgroundBroadcastEnabled(!!config.background_broadcast);
+      })
+      .catch((err) => {
+        logger.error("load background broadcast err", err);
+      });
     listen<number>("page-opacity-changed", (event) => {
       applyPageOpacity(event.payload);
     })
@@ -140,6 +154,20 @@ function App() {
       })
       .catch((err) => {
         logger.error("listen page opacity err", err);
+      });
+    listen<boolean>("background-broadcast-changed", (event) => {
+      useAppStateStoreWithNoHook
+        .getState()
+        .updateBackgroundBroadcastEnabled(event.payload);
+      if (!event.payload) {
+        void revealMainWindow();
+      }
+    })
+      .then((unlisten) => {
+        unlistenBackgroundBroadcast = unlisten;
+      })
+      .catch((err) => {
+        logger.error("listen background broadcast err", err);
       });
     waitForActivationAndRegister().catch((err) => {
       logger.error("wait activation err", err);
@@ -153,6 +181,10 @@ function App() {
       if (unlistenOpacity) {
         unlistenOpacity();
         unlistenOpacity = null;
+      }
+      if (unlistenBackgroundBroadcast) {
+        unlistenBackgroundBroadcast();
+        unlistenBackgroundBroadcast = null;
       }
     };
   }, []);

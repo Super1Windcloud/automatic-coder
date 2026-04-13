@@ -20,6 +20,9 @@ export async function resetWindow(offsetCallback: () => void) {
 }
 
 export async function showSolutionWindow() {
+  if (useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
+    return
+  }
   const contentHeight = await getWebViewHeight()
   const window = getCurrentWindow()
 
@@ -27,6 +30,10 @@ export async function showSolutionWindow() {
   lastHeight = contentHeight
 
   await window.setSize(new LogicalSize(800, contentHeight))
+}
+
+export async function hideCurrentWindow() {
+  await getCurrentWindow().hide()
 }
 
 async function resolveWindow(label?: string) {
@@ -91,4 +98,43 @@ export async function getScreenCaptureToBlobUrl(source: string = '截图') {
     logger.error(`${source} 失败`, error)
     useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath('')
   }
+}
+
+function stripMarkdownForSpeech(content: string) {
+  return content
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[[^\]]*]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/[*_~>-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+export function speakAnswer(content: string) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    logger.warn('当前环境不支持语音播报')
+    return
+  }
+
+  const sanitized = stripMarkdownForSpeech(content)
+  if (!sanitized) {
+    return
+  }
+
+  window.speechSynthesis.cancel()
+  const utterance = new SpeechSynthesisUtterance(sanitized)
+  utterance.lang = 'zh-CN'
+  utterance.rate = 1
+  utterance.pitch = 1
+  window.speechSynthesis.speak(utterance)
+}
+
+export function stopSpeakingAnswer() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    return
+  }
+
+  window.speechSynthesis.cancel()
 }

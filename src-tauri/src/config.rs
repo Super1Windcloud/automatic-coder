@@ -37,6 +37,7 @@ pub struct PreferencesConfig {
     code_language: String,
     prompt: String,
     pub page_opacity: f64,
+    pub background_broadcast: bool,
     pub vlm_key: String,
     pub vlm_model: String,
 }
@@ -48,6 +49,7 @@ impl Default for PreferencesConfig {
             code_language: "TypeScript".into(),
             prompt: String::new(),
             page_opacity: 1.0,
+            background_broadcast: false,
             vlm_key: String::new(),
             vlm_model: DEFAULT_VLM_MODEL.into(),
         }
@@ -59,6 +61,7 @@ pub struct AppState {
     pub(crate) prompt: Mutex<String>,
     pub(crate) capture_position: Mutex<DirectionEnum>,
     pub(crate) page_opacity: Mutex<f64>,
+    pub(crate) background_broadcast: Mutex<bool>,
     pub(crate) vlm_model: Mutex<String>,
 }
 
@@ -86,6 +89,10 @@ pub fn load_preferences(app: &mut App) {
         {
             let mut model_guard = state.vlm_model.lock().unwrap();
             *model_guard = sanitize_vlm_model(&preferences.vlm_model);
+        }
+        {
+            let mut background_broadcast_guard = state.background_broadcast.lock().unwrap();
+            *background_broadcast_guard = preferences.background_broadcast;
         }
         if preferences.prompt.is_empty() {
             open_language_selector(app.handle())
@@ -136,6 +143,45 @@ pub fn persist_page_opacity(app_handle: &AppHandle, opacity: f64) -> Result<f64,
 #[tauri::command]
 pub fn set_page_opacity(app_handle: AppHandle, opacity: f64) -> Result<f64, String> {
     persist_page_opacity(&app_handle, opacity)
+}
+
+fn persist_background_broadcast_value(enabled: bool) -> Result<(), String> {
+    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences")
+        .map_err(|err| format!("加载配置失败: {err}"))?;
+    cfg.background_broadcast = enabled;
+    confy::store("interview-coder-config", "preferences", cfg)
+        .map_err(|err| format!("保存配置失败: {err}"))
+}
+
+pub fn persist_background_broadcast(app_handle: &AppHandle, enabled: bool) -> Result<bool, String> {
+    let state: State<AppState> = app_handle.state();
+    *state
+        .background_broadcast
+        .lock()
+        .map_err(|_| "后台播音状态锁获取失败".to_string())? = enabled;
+
+    persist_background_broadcast_value(enabled)?;
+    app_handle
+        .emit("background-broadcast-changed", enabled)
+        .map_err(|err| format!("广播后台播音变更失败: {err}"))?;
+
+    Ok(enabled)
+}
+
+pub fn toggle_background_broadcast(app_handle: &AppHandle) -> Result<bool, String> {
+    let current = {
+        let state: State<AppState> = app_handle.state();
+        *state
+            .background_broadcast
+            .lock()
+            .map_err(|_| "后台播音状态锁获取失败".to_string())?
+    };
+    persist_background_broadcast(app_handle, !current)
+}
+
+#[tauri::command]
+pub fn set_background_broadcast(app_handle: AppHandle, enabled: bool) -> Result<bool, String> {
+    persist_background_broadcast(&app_handle, enabled)
 }
 
 #[tauri::command]

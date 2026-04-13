@@ -40,6 +40,8 @@ export interface AppStateNoHook {
   updateCurrentScreenShotPath: (value: string) => void
   startShowSolution: boolean
   updateStartShowSolution: (value: boolean) => void
+  backgroundBroadcastEnabled: boolean
+  updateBackgroundBroadcastEnabled: (value: boolean) => void
 }
 
 export const useAppStateStoreWithNoHook = createStore<AppStateNoHook>((set) => {
@@ -50,5 +52,8 @@ export const useAppStateStoreWithNoHook = createStore<AppStateNoHook>((set) => {
     startShowSolution: false,
     updateStartShowSolution: (value) =>
       set(() => ({ startShowSolution: value })),
+    backgroundBroadcastEnabled: false,
+    updateBackgroundBroadcastEnabled: (value) =>
+      set(() => ({ backgroundBroadcastEnabled: value })),
   }
 })

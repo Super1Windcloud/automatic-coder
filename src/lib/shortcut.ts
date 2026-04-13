@@ -7,8 +7,10 @@ import { register } from '@tauri-apps/plugin-global-shortcut'
 import { createScopedLogger } from '@/lib/logger.ts'
 import {
   getScreenCaptureToBlobUrl,
+  hideCurrentWindow,
   resetWindow,
   showSolutionWindow,
+  stopSpeakingAnswer,
 } from '@/lib/system.ts'
 import { checkCurrentAppUpdate } from '@/services/update.ts'
 import { useAppStateStoreWithNoHook } from '@/store'
@@ -49,7 +51,17 @@ export async function registryGlobalShortcut() {
       const result = await getCurrentWindow().innerPosition()
       ;[lastX, lastY] = [result.x, result.y]
       useAppStateStoreWithNoHook.getState().updateStartShowSolution(true)
-      await showSolutionWindow()
+      if (useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
+        await hideCurrentWindow()
+      } else {
+        await showSolutionWindow()
+      }
+    }
+  })
+
+  await registerShortcut('Alt+Space', async (event) => {
+    if (event.state === 'Released') {
+      stopSpeakingAnswer()
     }
   })
 

@@ -6,6 +6,7 @@ const logger = createScopedLogger('vlm')
 
 export async function getScreenShotSolutionFromVLM(
   renderCallBack: (content: string) => void,
+  doneCallback?: (content: string) => void,
 ) {
   let content = ''
   const unlistenFn: UnlistenFn = await listen('completion_stream', (event) => {
@@ -16,15 +17,23 @@ export async function getScreenShotSolutionFromVLM(
 
     renderCallBack(content)
   })
+  const unlistenDoneFn: UnlistenFn = await listen('completion_done', () => {
+    doneCallback?.(content)
+  })
 
   invoke('create_screenshot_solution_stream')
     .then(() => logger.info('截图方案生成成功'))
     .catch((err) => {
       logger.error('get solution error', err)
       unlistenFn()
+      unlistenDoneFn()
     })
     .finally(() => {
       unlistenFn()
+      unlistenDoneFn()
     })
-  return unlistenFn
+  return () => {
+    unlistenFn()
+    unlistenDoneFn()
+  }
 }

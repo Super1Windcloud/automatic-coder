@@ -1,8 +1,10 @@
-use crate::config::{open_language_selector, persist_page_opacity, toggle_vlm_model};
+use crate::config::{
+    open_language_selector, persist_page_opacity, toggle_background_broadcast, toggle_vlm_model,
+};
 use crate::utils::{is_dev, toggle_webview_devtools};
 use crate::{app_debug, app_error, app_info};
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::menu::{Menu, MenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Manager, Position, Wry};
 use tauri_plugin_dialog::DialogExt;
@@ -203,11 +205,26 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
     #[cfg(target_os = "macos")]
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+    let initial_background_broadcast = {
+        let state: tauri::State<crate::config::AppState> = app.state();
+        *state.background_broadcast.lock().unwrap()
+    };
+
     let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+5")).unwrap();
     let code_language =
         MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();
     let toggle_model =
         MenuItem::with_id(app, "toggle_model", "切换模型", true, Some("Alt+4")).unwrap();
+    let background_broadcast = CheckMenuItem::with_id(
+        app,
+        "background_broadcast",
+        "后台播音",
+        true,
+        initial_background_broadcast,
+        None::<&str>,
+    )
+    .unwrap();
+    let background_broadcast_item = background_broadcast.clone();
     let about_item = MenuItem::with_id(app, "about", "关于", true, Some("")).unwrap();
     let opacity_100 = MenuItem::with_id(app, "page_opacity_100", "100%", true, None::<&str>)
         .unwrap();
@@ -250,6 +267,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             &about_item,
             &code_language,
             &toggle_model,
+            &background_broadcast,
             &page_opacity_submenu,
             &quit_i,
         ],
@@ -260,7 +278,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .icon(app.default_window_icon().unwrap().clone())
-        .on_menu_event(|app, event| match event.id.as_ref() {
+        .on_menu_event(move |app, event| match event.id.as_ref() {
             "quit" => {
                 graceful_exit(app);
             }
@@ -289,6 +307,15 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                             .show()
                             .unwrap()
                     }
+                }
+            },
+            "background_broadcast" => match toggle_background_broadcast(app) {
+                Ok(enabled) => {
+                    let _ = background_broadcast_item.set_checked(enabled);
+                    app_info!("system", "background broadcast changed to {}", enabled);
+                }
+                Err(err) => {
+                    app_error!("system", "{err}");
                 }
             },
             "page_opacity_100" => apply_page_opacity_from_tray(app, 1.0),

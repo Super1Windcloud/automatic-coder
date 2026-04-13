@@ -45,6 +45,7 @@
     "core:window:allow-start-dragging",
     "opener:allow-open-url",
     "core:window:allow-show",
+    "core:window:allow-hide",
     "core:window:allow-center",
     "notification:default",
     {

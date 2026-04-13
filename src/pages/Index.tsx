@@ -3,7 +3,11 @@ import { UnlistenFn } from "@tauri-apps/api/event";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useAsync } from "react-use";
 import { MarkdownPreview } from "@/components/MarkdownPreview";
-import { showSolutionWindow } from "@/lib/system.ts";
+import {
+  hideCurrentWindow,
+  showSolutionWindow,
+  speakAnswer,
+} from "@/lib/system.ts";
 import { getScreenShotSolutionFromVLM } from "@/lib/vlm.ts";
 import { useAppStateStoreWithNoHook } from "@/store";
 
@@ -38,6 +42,10 @@ const Index = ({
     useAppStateStoreWithNoHook.subscribe, // 订阅状态变化
     () => useAppStateStoreWithNoHook.getState().startShowSolution, // selector
   );
+  const backgroundBroadcastEnabled = useSyncExternalStore(
+    useAppStateStoreWithNoHook.subscribe,
+    () => useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled,
+  );
   const [solutionContent, setSolutionContent] = useState<string>("");
   const [unlistenFn, setUnlistenFn] = useState<UnlistenFn | null>(null);
   const [preferenceSummary, setPreferenceSummary] =
@@ -53,13 +61,24 @@ const Index = ({
   }, [currentScreenShotPath]);
 
   useAsync(async () => {
-    await showSolutionWindow();
+    if (backgroundBroadcastEnabled) {
+      await hideCurrentWindow();
+    } else {
+      await showSolutionWindow();
+    }
 
     if (hasSolution && startShowSolution) {
       const unlistener = await getScreenShotSolutionFromVLM(
         (content: string) => {
           setSolutionContent(content);
-          showSolutionWindow();
+          if (!useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
+            showSolutionWindow();
+          }
+        },
+        (content: string) => {
+          if (useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
+            speakAnswer(content);
+          }
         },
       );
       // 如果是 setUnlistenFn(unlistener); 会转换为 setUnlistenFn(prev => unlistener(prev)); 会立刻执行
@@ -67,7 +86,7 @@ const Index = ({
     } else {
       setSolutionContent("");
     }
-  }, [hasSolution, startShowSolution]);
+  }, [backgroundBroadcastEnabled, hasSolution, startShowSolution]);
 
   useEffect(() => {
     if (!startShowSolution && unlistenFn) {
@@ -80,7 +99,9 @@ const Index = ({
   useAsync(async () => {
     // 防抖
     const timeout = setTimeout(() => {
-      showSolutionWindow();
+      if (!useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
+        showSolutionWindow();
+      }
     }, 300);
     return () => clearTimeout(timeout);
   }, [solutionContent]);
@@ -147,6 +168,7 @@ const Index = ({
       >
         <span>截图(Alt+1)</span>
         <span>答案(Alt+2)</span>
+        <span>停播(Alt+Space)</span>
         <span>移动(Alt+↕↔)</span>
         <span>重置(Alt+`)</span>
         <span>隐藏(Ctrl+Shift+`)</span>
