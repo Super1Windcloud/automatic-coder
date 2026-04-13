@@ -82,10 +82,23 @@ Each location contains a folder named after a 64-bit fingerprint hash containing
 
 Use the provided scripts to publish new versions to GitHub:
 
+- Automatic bump + build + upload:
+  `pnpm publish:new`
+- Explicit platform:
+  `pnpm publish:new:windows`
+  `pnpm publish:new:macos`
+
 - **Windows**: `pnpm tsx scripts/publish_windows.ts`
 - **macOS**: `pnpm tsx scripts/publish_macos.ts`
 
-These scripts will:
+`publish:new` will:
+
+1. Increment the patch version automatically, for example `1.0.11 -> 1.0.12`.
+2. Sync the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`.
+3. Run `pnpm tb` to build the installer bundle.
+4. Upload the generated assets to the GitHub Release for that version.
+
+The platform-specific scripts will:
 
 1. Update `latest.json` with the new version and signatures.
 2. Create/Update a GitHub Release.
