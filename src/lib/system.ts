@@ -131,6 +131,22 @@ export function speakAnswer(content: string) {
   window.speechSynthesis.speak(utterance)
 }
 
+export function toggleSpeakingAnswer() {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    return
+  }
+
+  const synth = window.speechSynthesis
+  if (synth.paused) {
+    synth.resume()
+    return
+  }
+
+  if (synth.speaking) {
+    synth.pause()
+  }
+}
+
 export function stopSpeakingAnswer() {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     return

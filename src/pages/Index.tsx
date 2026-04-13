@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { UnlistenFn } from "@tauri-apps/api/event";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { useAsync } from "react-use";
 import { MarkdownPreview } from "@/components/MarkdownPreview";
 import {
   hideCurrentWindow,
@@ -60,33 +59,57 @@ const Index = ({
     }
   }, [currentScreenShotPath]);
 
-  useAsync(async () => {
+  useEffect(() => {
     if (backgroundBroadcastEnabled) {
-      await hideCurrentWindow();
-    } else {
-      await showSolutionWindow();
+      void hideCurrentWindow();
+    } else if (hasSolution && startShowSolution) {
+      void showSolutionWindow();
+    }
+  }, [backgroundBroadcastEnabled, hasSolution, startShowSolution]);
+
+  useEffect(() => {
+    if (!hasSolution || !startShowSolution) {
+      setSolutionContent("");
+      return;
     }
 
-    if (hasSolution && startShowSolution) {
+    let disposed = false;
+
+    const startRequest = async () => {
       const unlistener = await getScreenShotSolutionFromVLM(
         (content: string) => {
+          if (disposed) {
+            return;
+          }
           setSolutionContent(content);
           if (!useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
-            showSolutionWindow();
+            void showSolutionWindow();
           }
         },
         (content: string) => {
-          if (useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
+          if (
+            !disposed &&
+            useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled
+          ) {
             speakAnswer(content);
           }
         },
       );
-      // 如果是 setUnlistenFn(unlistener); 会转换为 setUnlistenFn(prev => unlistener(prev)); 会立刻执行
+
+      if (disposed) {
+        unlistener();
+        return;
+      }
+
       setUnlistenFn(() => unlistener);
-    } else {
-      setSolutionContent("");
-    }
-  }, [backgroundBroadcastEnabled, hasSolution, startShowSolution]);
+    };
+
+    void startRequest();
+
+    return () => {
+      disposed = true;
+    };
+  }, [hasSolution, startShowSolution]);
 
   useEffect(() => {
     if (!startShowSolution && unlistenFn) {
@@ -96,11 +119,10 @@ const Index = ({
     }
   }, [unlistenFn, startShowSolution]);
 
-  useAsync(async () => {
-    // 防抖
+  useEffect(() => {
     const timeout = setTimeout(() => {
       if (!useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
-        showSolutionWindow();
+        void showSolutionWindow();
       }
     }, 300);
     return () => clearTimeout(timeout);
@@ -168,7 +190,7 @@ const Index = ({
       >
         <span>截图(Alt+1)</span>
         <span>答案(Alt+2)</span>
-        <span>停播(Alt+Space)</span>
+        <span>暂停/恢复(Alt+Space)</span>
         <span>移动(Alt+↕↔)</span>
         <span>重置(Alt+`)</span>
         <span>隐藏(Ctrl+Shift+`)</span>

@@ -10,7 +10,7 @@ import {
   hideCurrentWindow,
   resetWindow,
   showSolutionWindow,
-  stopSpeakingAnswer,
+  toggleSpeakingAnswer,
 } from '@/lib/system.ts'
 import { checkCurrentAppUpdate } from '@/services/update.ts'
 import { useAppStateStoreWithNoHook } from '@/store'
@@ -61,7 +61,7 @@ export async function registryGlobalShortcut() {
 
   await registerShortcut('Alt+Space', async (event) => {
     if (event.state === 'Released') {
-      stopSpeakingAnswer()
+      toggleSpeakingAnswer()
     }
   })
 

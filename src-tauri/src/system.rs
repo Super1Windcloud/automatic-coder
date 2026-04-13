@@ -226,7 +226,13 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
     let shortcut_exit =
         MenuItem::with_id(app, "shortcut_exit", "退出", false, Some("Alt+5")).unwrap();
     let shortcut_stop_audio =
-        MenuItem::with_id(app, "shortcut_stop_audio", "停止播音", false, Some("Alt+Space"))
+        MenuItem::with_id(
+            app,
+            "shortcut_stop_audio",
+            "暂停/恢复播音",
+            false,
+            Some("Alt+Space"),
+        )
             .unwrap();
     let shortcut_move =
         MenuItem::with_id(app, "shortcut_move", "移动窗口", false, Some("Alt+↑↓←→")).unwrap();
