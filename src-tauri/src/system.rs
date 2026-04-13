@@ -215,6 +215,31 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();
     let toggle_model =
         MenuItem::with_id(app, "toggle_model", "切换模型", true, Some("Alt+4")).unwrap();
+    let shortcut_capture =
+        MenuItem::with_id(app, "shortcut_capture", "截图", false, Some("Alt+1")).unwrap();
+    let shortcut_answer =
+        MenuItem::with_id(app, "shortcut_answer", "答案", false, Some("Alt+2")).unwrap();
+    let shortcut_preferences =
+        MenuItem::with_id(app, "shortcut_preferences", "偏好设置", false, Some("Alt+3")).unwrap();
+    let shortcut_model =
+        MenuItem::with_id(app, "shortcut_model", "切换模型", false, Some("Alt+4")).unwrap();
+    let shortcut_exit =
+        MenuItem::with_id(app, "shortcut_exit", "退出", false, Some("Alt+5")).unwrap();
+    let shortcut_stop_audio =
+        MenuItem::with_id(app, "shortcut_stop_audio", "停止播音", false, Some("Alt+Space"))
+            .unwrap();
+    let shortcut_move =
+        MenuItem::with_id(app, "shortcut_move", "移动窗口", false, Some("Alt+↑↓←→")).unwrap();
+    let shortcut_reset =
+        MenuItem::with_id(app, "shortcut_reset", "重置窗口", false, Some("Alt+`")).unwrap();
+    let shortcut_hide = MenuItem::with_id(
+        app,
+        "shortcut_hide",
+        "显示/隐藏窗口",
+        false,
+        Some("Ctrl+Shift+`"),
+    )
+    .unwrap();
     let background_broadcast = CheckMenuItem::with_id(
         app,
         "background_broadcast",
@@ -261,10 +286,28 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         ],
     )
     .unwrap();
+    let shortcut_help_submenu = Submenu::with_items(
+        app,
+        "快捷键帮助",
+        true,
+        &[
+            &shortcut_capture,
+            &shortcut_answer,
+            &shortcut_stop_audio,
+            &shortcut_preferences,
+            &shortcut_model,
+            &shortcut_exit,
+            &shortcut_move,
+            &shortcut_reset,
+            &shortcut_hide,
+        ],
+    )
+    .unwrap();
     let menu = Menu::with_items(
         app,
         &[
             &about_item,
+            &shortcut_help_submenu,
             &code_language,
             &toggle_model,
             &background_broadcast,
