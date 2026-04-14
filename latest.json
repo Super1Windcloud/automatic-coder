@@ -1,21 +1,9 @@
 {
-  "version": "1.0.11",
+  "version": "1.0.12",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUlBReHJDcE8rZWdnRUo2NWJ1cDB3TkhuZUJDbnQwSEZIQTZ1eTNCUGdLcXU2MG5tcjM5Z0lJQ2QwalFmc2VRaWs1VXZUTGtERFR0NUtsVnNSRDc3WlFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0NTgxMzkzCWZpbGU6SW50ZXJ2aWV3LUNvZGVyXzEuMC4xMV94NjQtc2V0dXAuZXhlCmdoZHl1QUtjblEwbjcyREg5dlhxcjdHcnUxYmZ4dHA2Q1RjK3FuaWdoWTB5UW5CbVBiOHh1UUttMmlxUGIyUXBqMlJoQkpPbVkzaHpjRlpOclpBeUJnPT0K",
-      "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.11/Interview-Coder_1.0.11_x64-setup.exe"
-    },
-    "darwin-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkM5bHNsSnlqMlc2SmVKZ1NHOEpkYUo5NWFpNkRaYWgwQ1Y1TjR2OFA0SElYNUlLc3R0a3pQalA5Q0xpWnhaY3dGLytGcHJWWjlXVXFPd1h0QXQ4Zmc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0NTg2NjM0CWZpbGU6SW50ZXJ2aWV3LUNvZGVyLmFwcC50YXIuZ3oKWVRrMzFNcWR6emRtOCtwTzRsQ09IOU1kUmZGUFJiZGdJOGNsRlZlZm53bXBRa0U1K3VaU1NXM2s2WU9nMzZLa2hFY2VhMDlVS0E1YWE5Y1dzRTdSREE9PQo=",
-      "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.11/Interview-Coder.app.tar.gz"
-    },
-    "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkJSbmc3TEtuNXNmUi9pSTQ0NFdmYzFSTVhIeFF6TVp0cVBPa0p4QmEybVJ0NG9xK0NmTWlYQjlRbjJVYm9kUHQxSlhYc1M0YWNuNStGRTFReFova3dnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzczOTAxMjg5CWZpbGU6SW50ZXJ2aWV3LUNvZGVyXzEuMC43X3g2NC1zZXR1cC5leGUKZDR6bW03NjRQbnhzUWtLbEJVeGRyb0hzKzJHMGxpWW1HbGdQdkxsYWtsczFXN1pqUi9ReGFxZGRyaUNDRWhMNzA5UVhmT0dtUGdGSlNya1BIMytKQ3c9PQo",
-      "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.7/Interview-Coder_1.0.7_x64-setup.exe"
-    },
-    "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkM5bHNsSnlqMlc2SmVKZ1NHOEpkYUo5NWFpNkRaYWgwQ1Y1TjR2OFA0SElYNUlLc3R0a3pQalA5Q0xpWnhaY3dGLytGcHJWWjlXVXFPd1h0QXQ4Zmc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0NTg2NjM0CWZpbGU6SW50ZXJ2aWV3LUNvZGVyLmFwcC50YXIuZ3oKWVRrMzFNcWR6emRtOCtwTzRsQ09IOU1kUmZGUFJiZGdJOGNsRlZlZm53bXBRa0U1K3VaU1NXM2s2WU9nMzZLa2hFY2VhMDlVS0E1YWE5Y1dzRTdSREE9PQo=",
-      "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.11/Interview-Coder.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUk80MkdKdUtYYTZ5V0c3dmNFQmMvSDBHYmFwZ1lYM2NBamZINUxBTlJBUnZnU0c3dnNTa21RaGNpSWNKaWJjRTFTSEIrY2RURksvdlZEM21GUmhnYWdNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc2MTQxMTMzCWZpbGU6SW50ZXJ2aWV3LUNvZGVyXzEuMC4xMl94NjQtc2V0dXAuZXhlCkVTbzBJKzVoeVcxRExrOEdpb3VLU3NBM05RYkdVUUVjbE80Z0NCaVNBQlpacDE5bzhaUTM2VWpEV1VjMCtNOGhxVEk3bk0xYlJrc1JqcXBYd3l1U0J3PT0K",
+      "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.12/Interview-Coder_1.0.12_x64-setup.exe"
     }
   }
 }

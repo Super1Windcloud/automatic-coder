@@ -35,6 +35,24 @@ dmg:
 nsis:
     just bundle &&  tsx scripts/publish_windows.ts
 
+release:
+    pnpm tsx scripts/release.ts
+
+release-new-windows:
+    pnpm tsx scripts/release.ts windows
+
+release-new-macos:
+    pnpm tsx scripts/release.ts macos
+
+latest-json:
+    pnpm tsx scripts/upload_latest_json.ts
+
+latest-json-windows:
+    pnpm tsx scripts/upload_latest_json.ts windows
+
+latest-json-macos:
+    pnpm tsx scripts/upload_latest_json.ts macos
+
 publish:
     cn release draft --channel prod 234sdfsdf 1.0.0
     cn release upload--update-platform windows-x86_64 --channel prod --file <FILE>234sdfsdf $1.0.0
@@ -42,4 +60,4 @@ publish:
 
 
 build:
-    cd src-tauri && cargo build 
+    cd src-tauri && cargo build

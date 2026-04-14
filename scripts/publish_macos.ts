@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import path from "node:path";
 import axios from "axios";
 import dotenv from "dotenv";
 import pkg from "../package.json" with { type: "json" };
@@ -9,8 +10,9 @@ dotenv.config({
 
 const owner: string = "Super1Windcloud";
 const repo: string = "automatic-coder";
-const path: string = "latest.json";
-const token: string = process.env.GITHUB_TOKEN || "";
+const latestJsonAssetName = "latest.json";
+const token: string =
+  process.env.GITHUB_TOKEN || process.env.GitHub_token || "";
 
 interface PlatformInfo {
   signature: string;
@@ -22,13 +24,26 @@ interface Template {
   platforms: Record<string, PlatformInfo>;
 }
 
+function pruneEmptyPlatforms(template: Template): Template {
+  const platforms = Object.fromEntries(
+    Object.entries(template.platforms).filter(([, info]) => {
+      return Boolean(info.signature?.trim() && info.url?.trim());
+    }),
+  );
+
+  return {
+    ...template,
+    platforms,
+  };
+}
+
 async function fetchTemplate(): Promise<Template> {
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const url = `https://github.com/${owner}/${repo}/releases/latest/download/${latestJsonAssetName}`;
   try {
     const res = await axios.get(url, {
       headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github.v3.raw",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Accept: "application/json",
         "User-Agent": "Axios-Client",
       },
     });
@@ -68,46 +83,6 @@ templateStr.platforms["darwin-aarch64"].url =
   `https://github.com/${owner}/${repo}/releases/download/${pkg.version}/Interview-Coder.app.tar.gz`;
 
 console.log(templateStr);
-
-async function getFileInfo() {
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-  try {
-    const { data } = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "Axios-Client",
-      },
-    });
-    return data.sha;
-  } catch (err) {
-    return null;
-  }
-}
-
-async function updateJsonFile(newContent: string, sha: string | null) {
-  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-  const message = "publish new version";
-  const encodedContent = Buffer.from(newContent, "utf-8").toString("base64");
-
-  const res = await axios.put(
-    url,
-    {
-      message,
-      content: encodedContent,
-      sha: sha || undefined,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "Axios-Client",
-      },
-    },
-  );
-
-  return res.data;
-}
 
 async function uploadAsset(
   uploadUrl: string,
@@ -206,11 +181,15 @@ async function deleteExistingAsset(release: any, fileName: string) {
 }
 
 (async () => {
-  const sha = await getFileInfo();
-  const json = JSON.stringify(templateStr, null, 2);
-  await updateJsonFile(json, sha);
-
+  const sanitizedTemplate = pruneEmptyPlatforms(templateStr);
+  const json = JSON.stringify(sanitizedTemplate, null, 2);
   const release = await getOrCreateRelease();
+  const latestJsonFilePath = path.join(process.cwd(), latestJsonAssetName);
+  fs.writeFileSync(latestJsonFilePath, `${json}\n`, "utf-8");
+
+  await deleteExistingAsset(release, latestJsonAssetName);
+  await uploadAsset(release.upload_url, latestJsonFilePath, latestJsonAssetName);
+
   const updaterFileName = `Interview-Coder.app.tar.gz`;
   await deleteExistingAsset(release, updaterFileName);
   await uploadAsset(

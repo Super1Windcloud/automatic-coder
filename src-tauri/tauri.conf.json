@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Interview-Coder",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "identifier": "com.superuse.interview-coder",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -58,7 +58,7 @@
       },
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0QzAzRDA5QjIyM0I0OUIKUldTYnRDT3lDVDNBUkxFbFlkQmZqQzhEZEVKYTBPZ0ZMbW1Hd3hZNU9GazVXK1VCWi9Ba1hpem8K",
       "endpoints": [
-        "https://raw.githubusercontent.com/Super1Windcloud/automatic-coder/refs/heads/master/latest.json"
+        "https://github.com/Super1Windcloud/automatic-coder/releases/latest/download/latest.json"
       ]
     }
   }

@@ -68,6 +68,12 @@ function run(command: string, args: string[]) {
   });
 }
 
+function getPublishScript(platform: SupportedPlatform) {
+  return platform === 'windows'
+    ? 'scripts/publish_windows.ts'
+    : 'scripts/publish_macos.ts';
+}
+
 function syncVersions(nextVersion: string) {
   const packageJson = readJson<Record<string, unknown>>(packageJsonPath);
   packageJson.version = nextVersion;
@@ -87,18 +93,13 @@ function main() {
   const packageJson = readJson<{ version: string }>(packageJsonPath);
   const currentVersion = packageJson.version;
   const nextVersion = bumpPatchVersion(currentVersion);
+  const publishScript = getPublishScript(platform);
 
   console.log(`Releasing ${platform} build: ${currentVersion} -> ${nextVersion}`);
   syncVersions(nextVersion);
 
   run('pnpm', ['tb']);
-
-  if (platform === 'windows') {
-    run('pnpm', ['tsx', 'scripts/publish_windows.ts']);
-    return;
-  }
-
-  run('pnpm', ['tsx', 'scripts/publish_macos.ts']);
+  run('pnpm', ['tsx', publishScript]);
 }
 
 main();
