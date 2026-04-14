@@ -168,17 +168,6 @@ pub fn persist_background_broadcast(app_handle: &AppHandle, enabled: bool) -> Re
     Ok(enabled)
 }
 
-pub fn toggle_background_broadcast(app_handle: &AppHandle) -> Result<bool, String> {
-    let current = {
-        let state: State<AppState> = app_handle.state();
-        *state
-            .background_broadcast
-            .lock()
-            .map_err(|_| "后台播音状态锁获取失败".to_string())?
-    };
-    persist_background_broadcast(app_handle, !current)
-}
-
 #[tauri::command]
 pub fn set_background_broadcast(app_handle: AppHandle, enabled: bool) -> Result<bool, String> {
     persist_background_broadcast(&app_handle, enabled)

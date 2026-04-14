@@ -1,5 +1,5 @@
 use crate::config::{
-    open_language_selector, persist_page_opacity, toggle_background_broadcast, toggle_vlm_model,
+    open_language_selector, persist_background_broadcast, persist_page_opacity, toggle_vlm_model,
 };
 use crate::utils::{is_dev, toggle_webview_devtools};
 use crate::{app_debug, app_error, app_info};
@@ -246,6 +246,14 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         Some("Ctrl+Shift+`"),
     )
     .unwrap();
+    let background_broadcast_help = MenuItem::with_id(
+        app,
+        "background_broadcast_help",
+        "后台播音：开启后隐藏前端，Alt+2 答案改为扬声器播报",
+        false,
+        None::<&str>,
+    )
+    .unwrap();
     let background_broadcast = CheckMenuItem::with_id(
         app,
         "background_broadcast",
@@ -306,6 +314,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             &shortcut_move,
             &shortcut_reset,
             &shortcut_hide,
+            &background_broadcast_help,
         ],
     )
     .unwrap();
@@ -358,13 +367,18 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                     }
                 }
             },
-            "background_broadcast" => match toggle_background_broadcast(app) {
-                Ok(enabled) => {
-                    let _ = background_broadcast_item.set_checked(enabled);
-                    app_info!("system", "background broadcast changed to {}", enabled);
-                }
+            "background_broadcast" => match background_broadcast_item.is_checked() {
+                Ok(enabled) => match persist_background_broadcast(app, enabled) {
+                    Ok(saved_enabled) => {
+                        let _ = background_broadcast_item.set_checked(saved_enabled);
+                        app_info!("system", "background broadcast changed to {}", saved_enabled);
+                    }
+                    Err(err) => {
+                        app_error!("system", "{err}");
+                    }
+                },
                 Err(err) => {
-                    app_error!("system", "{err}");
+                    app_error!("system", "failed to read background broadcast menu state: {err}");
                 }
             },
             "page_opacity_100" => apply_page_opacity_from_tray(app, 1.0),

@@ -11,7 +11,12 @@ import { useAppStateStoreWithNoHook } from '@/store'
 let lastHeight = 0
 const logger = createScopedLogger('system')
 
+export function resetSolutionWindowHeightCache() {
+  lastHeight = 0
+}
+
 export async function resetWindow(offsetCallback: () => void) {
+  resetSolutionWindowHeightCache()
   await getCurrentWindow().setSize(new LogicalSize(800, 50))
   await getCurrentWindow().setPosition(new LogicalPosition(100, 50))
   offsetCallback()
@@ -23,8 +28,10 @@ export async function showSolutionWindow() {
   if (useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
     return
   }
-  const contentHeight = await getWebViewHeight()
   const window = getCurrentWindow()
+
+  await window.show()
+  const contentHeight = await getWebViewHeight()
 
   if (Math.abs(contentHeight - lastHeight) < 10) return // 🔥 忽略微小变化
   lastHeight = contentHeight

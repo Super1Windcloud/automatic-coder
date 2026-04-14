@@ -9,6 +9,7 @@ import {
   getScreenCaptureToBlobUrl,
   hideCurrentWindow,
   resetWindow,
+  resetSolutionWindowHeightCache,
   showSolutionWindow,
   toggleSpeakingAnswer,
 } from '@/lib/system.ts'
@@ -17,8 +18,6 @@ import { useAppStateStoreWithNoHook } from '@/store'
 
 let windowX = 0
 let windowY = 0
-let lastX = 0
-let lastY = 0
 let toggleFlag = false
 const logger = createScopedLogger('shortcut')
 const result = await getCurrentWindow().innerPosition()
@@ -39,7 +38,6 @@ export async function registryGlobalShortcut() {
   await registerShortcut('Alt+`', (event) => {
     if (event.state === 'Released') {
       resetWindow(async () => {
-        lastX = lastY = 0
         const result = await getCurrentWindow().innerPosition()
         ;[windowX, windowY] = [result.x, result.y]
       })
@@ -48,8 +46,6 @@ export async function registryGlobalShortcut() {
 
   await registerShortcut('Alt+2', async (event) => {
     if (event.state === 'Released') {
-      const result = await getCurrentWindow().innerPosition()
-      ;[lastX, lastY] = [result.x, result.y]
       useAppStateStoreWithNoHook.getState().updateStartShowSolution(true)
       if (useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
         await hideCurrentWindow()
@@ -68,8 +64,8 @@ export async function registryGlobalShortcut() {
   await registerShortcut('Alt+1', async (event) => {
     if (event.state === 'Released') {
       if (useAppStateStoreWithNoHook.getState().currentScreenShotPath) {
+        resetSolutionWindowHeightCache()
         await getCurrentWindow().setSize(new LogicalSize(800, 50))
-        await getCurrentWindow().setPosition(new LogicalPosition(lastX, lastY))
         toggleFlag = false
         useAppStateStoreWithNoHook.getState().updateCurrentScreenShotPath('')
         useAppStateStoreWithNoHook.getState().updateStartShowSolution(false)

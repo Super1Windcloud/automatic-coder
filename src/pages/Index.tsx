@@ -60,12 +60,38 @@ const Index = ({
   }, [currentScreenShotPath]);
 
   useEffect(() => {
+    if (!currentScreenShotPath) {
+      return;
+    }
+    if (useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void showSolutionWindow();
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [currentScreenShotPath]);
+
+  useEffect(() => {
     if (backgroundBroadcastEnabled) {
       void hideCurrentWindow();
     } else if (hasSolution && startShowSolution) {
       void showSolutionWindow();
     }
   }, [backgroundBroadcastEnabled, hasSolution, startShowSolution]);
+
+  useEffect(() => {
+    if (!backgroundBroadcastEnabled) {
+      return;
+    }
+    if (!solutionContent.trim()) {
+      return;
+    }
+
+    speakAnswer(solutionContent);
+  }, [backgroundBroadcastEnabled, solutionContent]);
 
   useEffect(() => {
     if (!hasSolution || !startShowSolution) {
@@ -159,6 +185,24 @@ const Index = ({
 
     loadPreferencesSummary();
   }, [currentScreenShotPath]);
+
+  useEffect(() => {
+    if (!preferenceSummary) {
+      return;
+    }
+    if (!currentScreenShotPath) {
+      return;
+    }
+    if (useAppStateStoreWithNoHook.getState().backgroundBroadcastEnabled) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void showSolutionWindow();
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [currentScreenShotPath, preferenceSummary]);
 
   return (
     <div
