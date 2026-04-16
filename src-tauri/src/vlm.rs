@@ -141,6 +141,27 @@ fn append_segment(app_handle: &AppHandle, buffer: &mut String, text: &str) -> bo
     true
 }
 
+fn is_stream_finished(choice: &Value) -> bool {
+    choice
+        .get("finish_reason")
+        .and_then(|reason| reason.as_str())
+        .is_some_and(|reason| !reason.is_empty() && reason != "null")
+}
+
+fn extract_sse_lines(buffer: &mut String) -> Vec<String> {
+    let normalized = buffer.replace("\r\n", "\n").replace('\r', "\n");
+    *buffer = normalized;
+
+    let mut lines = Vec::new();
+    while let Some(pos) = buffer.find('\n') {
+        let line = buffer[..pos].to_string();
+        let rest = buffer[pos + 1..].to_string();
+        lines.push(line);
+        *buffer = rest;
+    }
+    lines
+}
+
 async fn request_chat_completion_stream(
     app_handle: &AppHandle,
     model: &str,
@@ -233,15 +254,20 @@ async fn request_chat_completion_stream(
 
     let mut result = String::new();
     let mut finished = false;
+    let mut pending = String::new();
     while let Some(chunk) = timeout(Duration::from_secs(5), res.chunk())
         .await
         .map_err(|_| VlmError::Timeout("VLM 流式响应"))?
         .map_err(VlmError::Chunk)?
     {
         let text = String::from_utf8_lossy(&chunk);
+        pending.push_str(&text);
 
-        for line in text.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
+        for line in extract_sse_lines(&mut pending) {
+            if let Some(data) = line
+                .strip_prefix("data: ")
+                .or_else(|| line.strip_prefix("data:"))
+            {
                 let trimmed = data.trim();
                 if trimmed.is_empty() {
                     continue;
@@ -291,6 +317,12 @@ async fn request_chat_completion_stream(
                     VlmError::StreamShape(format!("响应缺少 choices 字段，原始片段: {}", trimmed))
                 })?;
 
+                if is_stream_finished(choice) {
+                    let _ = app_handle.emit("completion_done", "");
+                    finished = true;
+                    break;
+                }
+
                 let delta = choice.get("delta");
                 let message = choice.get("message");
                 if delta.is_none() && message.is_none() {
@@ -327,6 +359,73 @@ async fn request_chat_completion_stream(
         if finished {
             break;
         }
+    }
+    if !pending.trim().is_empty() && !finished {
+        for line in extract_sse_lines(&mut format!("{pending}\n")) {
+            if let Some(data) = line
+                .strip_prefix("data: ")
+                .or_else(|| line.strip_prefix("data:"))
+            {
+                let trimmed = data.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if trimmed == "[DONE]" {
+                    let _ = app_handle.emit("completion_done", "");
+                    finished = true;
+                    break;
+                }
+
+                let json_chunk: Value =
+                    serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
+                        raw: trimmed.to_string(),
+                        source,
+                    })?;
+
+                if let Some(error) = json_chunk.get("error") {
+                    let message = error
+                        .get("message")
+                        .and_then(|val| val.as_str())
+                        .map(|val| val.to_string())
+                        .unwrap_or_else(|| error.to_string());
+                    return Err(VlmError::Api(message));
+                }
+
+                let Some(choices) = json_chunk.get("choices").and_then(|choices| choices.as_array())
+                else {
+                    return Err(VlmError::StreamShape(format!(
+                        "响应缺少 choices 字段，原始片段: {}",
+                        trimmed
+                    )));
+                };
+
+                if choices.is_empty() {
+                    continue;
+                }
+
+                let choice = choices.first().ok_or_else(|| {
+                    VlmError::StreamShape(format!("响应缺少 choices 字段，原始片段: {}", trimmed))
+                })?;
+
+                if is_stream_finished(choice) {
+                    let _ = app_handle.emit("completion_done", "");
+                    finished = true;
+                    break;
+                }
+
+                if let Some(delta_obj) = choice.get("delta") {
+                    append_delta_field(app_handle, delta_obj.get("content"), &mut result);
+                }
+                if let Some(message_obj) = choice.get("message") {
+                    append_delta_field(app_handle, message_obj.get("content"), &mut result);
+                }
+            }
+        }
+    }
+    if !finished && !result.trim().is_empty() {
+        app_warn!("vlm", "stream ended without explicit end marker, treating buffered content as complete");
+        let _ = app_handle.emit("completion_done", "");
+        finished = true;
     }
     if !finished {
         return Err(VlmError::StreamShape("LLM 流式响应未发送结束标记".into()));
@@ -424,14 +523,19 @@ async fn request_custom_openai_stream(
 
     let mut result = String::new();
     let mut finished = false;
+    let mut pending = String::new();
     while let Some(chunk) = timeout(Duration::from_secs(5), res.chunk())
         .await
         .map_err(|_| VlmError::Timeout("自定义 OpenAI 流式响应"))?
         .map_err(VlmError::Chunk)?
     {
         let text = String::from_utf8_lossy(&chunk);
-        for line in text.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
+        pending.push_str(&text);
+        for line in extract_sse_lines(&mut pending) {
+            if let Some(data) = line
+                .strip_prefix("data: ")
+                .or_else(|| line.strip_prefix("data:"))
+            {
                 let trimmed = data.trim();
                 if trimmed.is_empty() {
                     continue;
@@ -465,6 +569,12 @@ async fn request_custom_openai_stream(
                     continue;
                 };
 
+                if is_stream_finished(choice) {
+                    let _ = app_handle.emit("completion_done", "");
+                    finished = true;
+                    break;
+                }
+
                 let mut appended = false;
                 if let Some(delta_obj) = choice.get("delta") {
                     appended |=
@@ -485,6 +595,69 @@ async fn request_custom_openai_stream(
         }
     }
 
+    if !pending.trim().is_empty() && !finished {
+        for line in extract_sse_lines(&mut format!("{pending}\n")) {
+            if let Some(data) = line
+                .strip_prefix("data: ")
+                .or_else(|| line.strip_prefix("data:"))
+            {
+                let trimmed = data.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if trimmed == "[DONE]" {
+                    let _ = app_handle.emit("completion_done", "");
+                    finished = true;
+                    break;
+                }
+
+                let json_chunk: Value =
+                    serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
+                        raw: trimmed.to_string(),
+                        source,
+                    })?;
+
+                if let Some(error) = json_chunk.get("error") {
+                    let message = error
+                        .get("message")
+                        .and_then(|val| val.as_str())
+                        .map(|val| val.to_string())
+                        .unwrap_or_else(|| error.to_string());
+                    return Err(VlmError::Api(message));
+                }
+
+                let Some(choice) = json_chunk
+                    .get("choices")
+                    .and_then(|choices| choices.as_array())
+                    .and_then(|choices| choices.first())
+                else {
+                    continue;
+                };
+
+                if is_stream_finished(choice) {
+                    let _ = app_handle.emit("completion_done", "");
+                    finished = true;
+                    break;
+                }
+
+                if let Some(delta_obj) = choice.get("delta") {
+                    append_delta_field(app_handle, delta_obj.get("content"), &mut result);
+                }
+                if let Some(message_obj) = choice.get("message") {
+                    append_delta_field(app_handle, message_obj.get("content"), &mut result);
+                }
+            }
+        }
+    }
+
+    if !finished && !result.trim().is_empty() {
+        app_warn!(
+            "vlm",
+            "custom openai stream ended without explicit end marker, treating buffered content as complete"
+        );
+        let _ = app_handle.emit("completion_done", "");
+        finished = true;
+    }
     if !finished {
         return Err(VlmError::StreamShape(
             "自定义 OpenAI 流式响应未发送结束标记".into(),
