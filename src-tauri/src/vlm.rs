@@ -5,11 +5,14 @@ use crate::config::{AppState, DEFAULT_VLM_MODEL, alternate_vlm_model, persist_vl
 use crate::utils::{get_custom_openai_config, get_env_key};
 use crate::{app_debug, app_error, app_info, app_warn};
 use base64::{Engine, engine::general_purpose};
-use reqwest::{Client, StatusCode};
+use reqwest::{Client, StatusCode, header};
 use serde_json::{Value, json};
 use std::fmt;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{Duration, timeout};
+
+const REQUEST_TIMEOUT_SECONDS: u64 = 30;
+const STREAM_CHUNK_TIMEOUT_SECONDS: u64 = 30;
 
 #[derive(Debug)]
 enum VlmError {
@@ -44,7 +47,9 @@ impl fmt::Display for VlmError {
             VlmError::StreamShape(msg) => write!(f, "响应结构异常: {msg}"),
             VlmError::Api(message) => write!(f, "API 错误: {message}"),
             VlmError::EmptyResponse => write!(f, "LLM 返回空内容"),
-            VlmError::Timeout(context) => write!(f, "{context}，操作超时 (5s)"),
+            VlmError::Timeout(context) => {
+                write!(f, "{context}，操作超时 ({}s)", REQUEST_TIMEOUT_SECONDS)
+            }
             VlmError::Config(message) => write!(f, "配置错误: {message}"),
         }
     }
@@ -303,6 +308,175 @@ fn handle_openai_event(
     Ok(())
 }
 
+fn handle_responses_event(
+    app_handle: &AppHandle,
+    trimmed: &str,
+    result: &mut String,
+    finished: &mut bool,
+) -> Result<(), VlmError> {
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if trimmed == "[DONE]" {
+        let _ = app_handle.emit("completion_done", "");
+        *finished = true;
+        return Ok(());
+    }
+
+    let json_chunk: Value = serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
+        raw: trimmed.to_string(),
+        source,
+    })?;
+
+    if let Some(error) = json_chunk.get("error") {
+        let message = error
+            .get("message")
+            .and_then(|val| val.as_str())
+            .map(|val| val.to_string())
+            .unwrap_or_else(|| error.to_string());
+        return Err(VlmError::Api(message));
+    }
+
+    match json_chunk.get("type").and_then(|node| node.as_str()) {
+        Some("response.output_text.delta") => {
+            if let Some(delta) = json_chunk.get("delta").and_then(|node| node.as_str()) {
+                append_segment(app_handle, result, delta);
+            }
+        }
+        Some("response.output_text.done") => {
+            if result.trim().is_empty() {
+                if let Some(text) = json_chunk.get("text").and_then(|node| node.as_str()) {
+                    append_segment(app_handle, result, text);
+                }
+            }
+        }
+        Some("response.completed") => {
+            let _ = app_handle.emit("completion_done", "");
+            *finished = true;
+        }
+        Some("response.failed") | Some("response.incomplete") => {
+            let message = json_chunk
+                .get("response")
+                .and_then(|response| response.get("error"))
+                .and_then(|error| error.get("message"))
+                .and_then(|message| message.as_str())
+                .map(|message| message.to_string())
+                .or_else(|| {
+                    json_chunk
+                        .get("response")
+                        .and_then(|response| response.get("status"))
+                        .and_then(|status| status.as_str())
+                        .map(|status| format!("Responses API 调用未完成: {status}"))
+                })
+                .unwrap_or_else(|| "Responses API 调用未完成".to_string());
+            return Err(VlmError::Api(message));
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+async fn send_request_with_timeout(
+    send_future: impl std::future::Future<Output = Result<reqwest::Response, reqwest::Error>>,
+    timeout_label: &'static str,
+) -> Result<reqwest::Response, VlmError> {
+    timeout(Duration::from_secs(REQUEST_TIMEOUT_SECONDS), send_future)
+        .await
+        .map_err(|_| VlmError::Timeout(timeout_label))?
+        .map_err(VlmError::Request)
+}
+
+async fn validate_streaming_response(
+    res: reqwest::Response,
+    html_error_message: &str,
+) -> Result<reqwest::Response, VlmError> {
+    if let Err(status_err) = res.error_for_status_ref() {
+        let status = status_err
+            .status()
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let body = res.text().await.unwrap_or_default();
+        return Err(VlmError::Status { code: status, body });
+    }
+
+    if let Some(content_type) = res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+    {
+        if content_type.contains("text/html") {
+            let body = res.text().await.unwrap_or_default();
+            let preview: String = body.chars().take(120).collect();
+            return Err(VlmError::StreamShape(format!(
+                "{html_error_message} 响应片段: {}",
+                preview.replace('\n', " ")
+            )));
+        }
+    }
+
+    Ok(res)
+}
+
+async fn consume_sse_stream(
+    app_handle: &AppHandle,
+    mut res: reqwest::Response,
+    chunk_timeout_label: &'static str,
+    missing_end_marker_message: &'static str,
+    mut event_handler: impl FnMut(&str, &mut String, &mut bool) -> Result<(), VlmError>,
+) -> Result<String, VlmError> {
+    let mut result = String::new();
+    let mut finished = false;
+    let mut pending = String::new();
+
+    while let Some(chunk) = timeout(Duration::from_secs(STREAM_CHUNK_TIMEOUT_SECONDS), res.chunk())
+        .await
+        .map_err(|_| VlmError::Timeout(chunk_timeout_label))?
+        .map_err(VlmError::Chunk)?
+    {
+        let text = String::from_utf8_lossy(&chunk);
+        pending.push_str(&text);
+        for event in extract_sse_events(&mut pending, false) {
+            if let Some(payload) = event_payload(&event) {
+                event_handler(&payload, &mut result, &mut finished)?;
+                if finished {
+                    break;
+                }
+            }
+        }
+        if finished {
+            break;
+        }
+    }
+
+    if !pending.trim().is_empty() && !finished {
+        for event in extract_sse_events(&mut pending, true) {
+            if let Some(payload) = event_payload(&event) {
+                event_handler(&payload, &mut result, &mut finished)?;
+                if finished {
+                    break;
+                }
+            }
+        }
+    }
+
+    if !finished && !result.trim().is_empty() {
+        app_warn!(
+            "vlm",
+            "stream ended without explicit end marker, treating buffered content as complete"
+        );
+        let _ = app_handle.emit("completion_done", "");
+        finished = true;
+    }
+    if !finished {
+        return Err(VlmError::StreamShape(missing_end_marker_message.into()));
+    }
+    if result.trim().is_empty() {
+        return Err(VlmError::EmptyResponse);
+    }
+
+    Ok(result)
+}
+
 async fn request_chat_completion_stream(
     app_handle: &AppHandle,
     model: &str,
@@ -380,64 +554,23 @@ async fn request_chat_completion_stream(
         .json(&body)
         .send();
 
-    let mut res = timeout(Duration::from_secs(5), send_future)
-        .await
-        .map_err(|_| VlmError::Timeout("VLM 接口请求"))?
-        .map_err(VlmError::Request)?;
+    let res = send_request_with_timeout(send_future, "VLM 接口请求").await?;
+    let res = validate_streaming_response(
+        res,
+        "VLM 接口返回了 HTML 页面而不是流式响应，请检查接口地址。",
+    )
+    .await?;
 
-    if let Err(status_err) = res.error_for_status_ref() {
-        let status = status_err
-            .status()
-            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        let body = res.text().await.unwrap_or_default();
-        return Err(VlmError::Status { code: status, body });
-    }
-
-    let mut result = String::new();
-    let mut finished = false;
-    let mut pending = String::new();
-    while let Some(chunk) = timeout(Duration::from_secs(5), res.chunk())
-        .await
-        .map_err(|_| VlmError::Timeout("VLM 流式响应"))?
-        .map_err(VlmError::Chunk)?
-    {
-        let text = String::from_utf8_lossy(&chunk);
-        pending.push_str(&text);
-
-        for event in extract_sse_events(&mut pending, false) {
-            if let Some(payload) = event_payload(&event) {
-                handle_openai_event(app_handle, &payload, &mut result, &mut finished, true)?;
-                if finished {
-                    break;
-                }
-            }
-        }
-        if finished {
-            break;
-        }
-    }
-    if !pending.trim().is_empty() && !finished {
-        for event in extract_sse_events(&mut pending, true) {
-            if let Some(payload) = event_payload(&event) {
-                handle_openai_event(app_handle, &payload, &mut result, &mut finished, true)?;
-                if finished {
-                    break;
-                }
-            }
-        }
-    }
-    if !finished && !result.trim().is_empty() {
-        app_warn!("vlm", "stream ended without explicit end marker, treating buffered content as complete");
-        let _ = app_handle.emit("completion_done", "");
-        finished = true;
-    }
-    if !finished {
-        return Err(VlmError::StreamShape("LLM 流式响应未发送结束标记".into()));
-    }
-    if result.trim().is_empty() {
-        return Err(VlmError::EmptyResponse);
-    }
-    Ok(result)
+    consume_sse_stream(
+        app_handle,
+        res,
+        "VLM 流式响应",
+        "LLM 流式响应未发送结束标记",
+        |payload, result, finished| {
+            handle_openai_event(app_handle, payload, result, finished, true)
+        },
+    )
+    .await
 }
 
 fn sanitize_custom_base_url(base_url: &str) -> String {
@@ -498,83 +631,107 @@ async fn request_custom_openai_stream(
         }
     ]);
 
-    let body = json!({
+    let chat_body = json!({
         "model": model,
         "stream": true,
         "messages": messages
     });
 
-    let endpoint = format!("{}/chat/completions", base_url);
     let client = Client::new();
-    let send_future = client
-        .post(endpoint)
+    let responses_body = json!({
+        "model": model,
+        "stream": true,
+        "instructions": prompt,
+        "input": [{
+            "role": "user",
+            "content": [{
+                "type": "input_image",
+                "image_url": image_url,
+                "detail": "high"
+            }]
+        }]
+    });
+
+    let responses_endpoint = format!("{}/responses", base_url);
+    let responses_res = send_request_with_timeout(
+        client
+            .post(&responses_endpoint)
+            .bearer_auth(api_key)
+            .json(&responses_body)
+            .send(),
+        "自定义 OpenAI Responses 接口请求",
+    )
+    .await;
+
+    match responses_res {
+        Ok(res) => {
+            let res = validate_streaming_response(
+                res,
+                "自定义 OpenAI Responses 接口返回了 HTML 页面而不是流式响应，请检查 Base URL。当前应填写 API 根路径，通常需要以 /v1 结尾。",
+            )
+            .await?;
+
+            let result = consume_sse_stream(
+                app_handle,
+                res,
+                "自定义 OpenAI Responses 流式响应",
+                "自定义 OpenAI Responses 流式响应未发送结束标记",
+                |payload, result, finished| {
+                    handle_responses_event(app_handle, payload, result, finished)
+                },
+            )
+            .await;
+
+            match result {
+                Ok(text) => {
+                    app_info!("vlm", "custom openai request succeeded via /responses");
+                    return Ok(text);
+                }
+                Err(err) => {
+                    app_warn!(
+                        "vlm",
+                        "custom openai /responses failed, falling back to /chat/completions: {}",
+                        err
+                    );
+                }
+            }
+        }
+        Err(err) => {
+            app_warn!(
+                "vlm",
+                "custom openai /responses request failed, falling back to /chat/completions: {}",
+                err
+            );
+        }
+    }
+
+    let chat_endpoint = format!("{}/chat/completions", base_url);
+    let res = send_request_with_timeout(
+        client
+        .post(chat_endpoint)
         .bearer_auth(api_key)
-        .json(&body)
-        .send();
+        .json(&chat_body)
+        .send(),
+        "自定义 OpenAI 接口请求",
+    )
+    .await?;
+    let res = validate_streaming_response(
+        res,
+        "自定义 OpenAI 接口返回了 HTML 页面而不是流式响应，请检查 Base URL。当前应填写 API 根路径，通常需要以 /v1 结尾。",
+    )
+    .await?;
 
-    let mut res = timeout(Duration::from_secs(5), send_future)
-        .await
-        .map_err(|_| VlmError::Timeout("自定义 OpenAI 接口请求"))?
-        .map_err(VlmError::Request)?;
-
-    if let Err(status_err) = res.error_for_status_ref() {
-        let status = status_err
-            .status()
-            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        let body = res.text().await.unwrap_or_default();
-        return Err(VlmError::Status { code: status, body });
-    }
-
-    let mut result = String::new();
-    let mut finished = false;
-    let mut pending = String::new();
-    while let Some(chunk) = timeout(Duration::from_secs(5), res.chunk())
-        .await
-        .map_err(|_| VlmError::Timeout("自定义 OpenAI 流式响应"))?
-        .map_err(VlmError::Chunk)?
-    {
-        let text = String::from_utf8_lossy(&chunk);
-        pending.push_str(&text);
-        for event in extract_sse_events(&mut pending, false) {
-            if let Some(payload) = event_payload(&event) {
-                handle_openai_event(app_handle, &payload, &mut result, &mut finished, false)?;
-                if finished {
-                    break;
-                }
-            }
-        }
-        if finished {
-            break;
-        }
-    }
-
-    if !pending.trim().is_empty() && !finished {
-        for event in extract_sse_events(&mut pending, true) {
-            if let Some(payload) = event_payload(&event) {
-                handle_openai_event(app_handle, &payload, &mut result, &mut finished, false)?;
-                if finished {
-                    break;
-                }
-            }
-        }
-    }
-
-    if !finished && !result.trim().is_empty() {
-        app_warn!(
-            "vlm",
-            "custom openai stream ended without explicit end marker, treating buffered content as complete"
-        );
-        let _ = app_handle.emit("completion_done", "");
-        finished = true;
-    }
-    if !finished {
-        return Err(VlmError::StreamShape(
-            "自定义 OpenAI 流式响应未发送结束标记".into(),
-        ));
-    }
-    if result.trim().is_empty() {
-        return Err(VlmError::EmptyResponse);
-    }
+    let result = consume_sse_stream(
+        app_handle,
+        res,
+        "自定义 OpenAI 流式响应",
+        "自定义 OpenAI 流式响应未发送结束标记",
+        |payload, result, finished| {
+            handle_openai_event(app_handle, payload, result, finished, false)
+        },
+    )
+    .await?;
+    app_info!("vlm", "custom openai request succeeded via /chat/completions");
     Ok(result)
 }
 

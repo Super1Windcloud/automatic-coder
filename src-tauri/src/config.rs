@@ -1,6 +1,7 @@
 #![allow(clippy::let_and_return)]
 
 use std::sync::Mutex;
+use reqwest::Url;
 use tauri::{App, AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::utils::is_dev;
@@ -45,9 +46,45 @@ fn sanitize_openai_compat_model(model: &str) -> String {
 fn sanitize_openai_compat_base_url(base_url: &str) -> String {
     let base_url = base_url.trim().trim_end_matches('/');
     if base_url.is_empty() {
-        DEFAULT_OPENAI_COMPAT_BASE_URL.to_string()
-    } else {
-        base_url.to_string()
+        return DEFAULT_OPENAI_COMPAT_BASE_URL.to_string();
+    }
+
+    if let Ok(parsed) = Url::parse(base_url) {
+        let path = parsed.path().trim_end_matches('/');
+        if path.is_empty() || path == "/" {
+            return format!("{base_url}/v1");
+        }
+    }
+
+    base_url.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_openai_compat_base_url;
+
+    #[test]
+    fn sanitize_openai_compat_base_url_defaults_when_empty() {
+        assert_eq!(
+            sanitize_openai_compat_base_url(""),
+            "https://api.openai.com/v1"
+        );
+    }
+
+    #[test]
+    fn sanitize_openai_compat_base_url_appends_v1_for_domain_root() {
+        assert_eq!(
+            sanitize_openai_compat_base_url("https://www.aizhiwen.top"),
+            "https://www.aizhiwen.top/v1"
+        );
+    }
+
+    #[test]
+    fn sanitize_openai_compat_base_url_preserves_existing_path() {
+        assert_eq!(
+            sanitize_openai_compat_base_url("https://www.aizhiwen.top/v1"),
+            "https://www.aizhiwen.top/v1"
+        );
     }
 }
 
@@ -396,7 +433,7 @@ pub fn open_language_selector(app_handle: &AppHandle) {
     webview_window.set_decorations(false).unwrap();
     webview_window.set_skip_taskbar(true).unwrap();
     webview_window.set_enabled(true).unwrap();
-    webview_window.set_always_on_top(false).unwrap();
+    webview_window.set_always_on_top(true).unwrap();
     webview_window.show().unwrap();
 }
 
@@ -436,7 +473,7 @@ pub fn open_custom_openai_selector(app_handle: &AppHandle) {
     webview_window.set_decorations(false).unwrap();
     webview_window.set_skip_taskbar(true).unwrap();
     webview_window.set_enabled(true).unwrap();
-    webview_window.set_always_on_top(false).unwrap();
+    webview_window.set_always_on_top(true).unwrap();
     webview_window.show().unwrap();
 }
 
