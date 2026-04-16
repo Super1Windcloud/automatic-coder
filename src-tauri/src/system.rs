@@ -223,7 +223,15 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
     let code_language =
         MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();
     let toggle_model =
-        MenuItem::with_id(app, "toggle_model", "切换模型", true, Some("Alt+4")).unwrap();
+        MenuItem::with_id(
+            app,
+            "toggle_model",
+            "切换模型",
+            !initial_custom_openai_enabled,
+            Some("Alt+4"),
+        )
+        .unwrap();
+    let toggle_model_item = toggle_model.clone();
     let custom_openai_settings =
         MenuItem::with_id(app, "custom_openai_settings", "自定义 OpenAI 接口配置", true, None::<&str>)
             .unwrap();
@@ -441,27 +449,37 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             "code_language" => {
                 open_language_selector(app);
             }
-            "toggle_model" => match toggle_vlm_model(app) {
-                Ok(model) => {
-                    app_info!("system", "VLM model switched to {model:?}");
-                    if is_dev() {
-                        app.notification()
-                            .builder()
-                            .title("Tauri")
-                            .body(format!("Tauri VLM Model is {model:?}"))
-                            .show()
-                            .unwrap()
-                    }
+            "toggle_model" => {
+                let custom_openai_enabled = {
+                    let state: tauri::State<crate::config::AppState> = app.state();
+                    *state.custom_openai_enabled.lock().unwrap()
+                };
+                if custom_openai_enabled {
+                    app_info!("system", "toggle model ignored because custom openai is enabled");
+                    return;
                 }
-                Err(err) => {
-                    app_error!("system", "{err}");
-                    if is_dev() {
-                        app.notification()
-                            .builder()
-                            .title("Tauri")
-                            .body(err)
-                            .show()
-                            .unwrap()
+                match toggle_vlm_model(app) {
+                    Ok(model) => {
+                        app_info!("system", "VLM model switched to {model:?}");
+                        if is_dev() {
+                            app.notification()
+                                .builder()
+                                .title("Tauri")
+                                .body(format!("Tauri VLM Model is {model:?}"))
+                                .show()
+                                .unwrap()
+                        }
+                    }
+                    Err(err) => {
+                        app_error!("system", "{err}");
+                        if is_dev() {
+                            app.notification()
+                                .builder()
+                                .title("Tauri")
+                                .body(err)
+                                .show()
+                                .unwrap()
+                        }
                     }
                 }
             },
@@ -472,6 +490,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                 Ok(enabled) => match persist_custom_openai_enabled(app, enabled) {
                     Ok(saved_enabled) => {
                         let _ = custom_openai_enabled_item.set_checked(saved_enabled);
+                        let _ = toggle_model_item.set_enabled(!saved_enabled);
                         app_info!("system", "custom openai changed to {}", saved_enabled);
                     }
                     Err(err) => {
