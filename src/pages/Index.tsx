@@ -182,7 +182,7 @@ const Index = ({
           model: config.vlm_model || "zai-org/GLM-4.5V",
           opacity: `${Math.round((config.page_opacity ?? 1) * 100)}%`,
           customOpenAiEnabled: config.custom_openai_enabled ? "已开启" : "未开启",
-          customOpenAiModel: config.custom_openai_model || "gpt-4o",
+          customOpenAiModel: config.custom_openai_model || "gpt-5.4",
         });
       } catch (error) {
         console.error("加载配置摘要失败", error);

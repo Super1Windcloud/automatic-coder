@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_VLM_MODEL: &str = "zai-org/GLM-4.5V";
 pub const DEFAULT_OPENAI_COMPAT_BASE_URL: &str = "https://api.openai.com/v1";
-pub const DEFAULT_OPENAI_COMPAT_MODEL: &str = "gpt-4o";
+pub const DEFAULT_OPENAI_COMPAT_MODEL: &str = "gpt-5.4";
 
 pub fn alternate_vlm_model(current: &str) -> &'static str {
     let _ = current;

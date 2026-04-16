@@ -61,7 +61,7 @@ async function loadPreferences() {
       apiKeyInput.value = config.custom_openai_api_key || ''
     }
     if (modelInput) {
-      modelInput.value = config.custom_openai_model || 'gpt-4o'
+      modelInput.value = config.custom_openai_model || 'gpt-5.4'
     }
   } catch (err) {
     logger.error('加载自定义 OpenAI 配置失败', err)

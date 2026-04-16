@@ -585,7 +585,7 @@ fn sanitize_custom_base_url(base_url: &str) -> String {
 fn sanitize_custom_model(model: &str) -> String {
     let normalized = model.trim();
     if normalized.is_empty() {
-        "gpt-4o".to_string()
+        "gpt-5.4".to_string()
     } else {
         normalized.to_string()
     }
