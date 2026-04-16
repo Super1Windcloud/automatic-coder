@@ -499,10 +499,7 @@ async fn request_custom_openai_stream(
 #[tauri::command]
 pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<String, String> {
     let state = app_handle.state::<AppState>();
-    let custom_openai_enabled = {
-        let (enabled, _, _, _) = get_custom_openai_config();
-        enabled
-    };
+    let (custom_openai_enabled, _, _, custom_model) = get_custom_openai_config();
     let prompt = state.prompt.lock().unwrap().clone();
     let direction = *state
         .capture_position
@@ -518,7 +515,9 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
 
     let base64_str = general_purpose::STANDARD.encode(&bytes);
     let base64 = format!("data:image/png;base64,{}", base64_str);
-    let model_name = {
+    let model_name = if custom_openai_enabled {
+        sanitize_custom_model(&custom_model)
+    } else {
         let locked = state.vlm_model.lock().unwrap();
         if locked.is_empty() {
             DEFAULT_VLM_MODEL.to_string()

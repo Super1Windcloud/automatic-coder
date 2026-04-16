@@ -39,6 +39,7 @@ saveButton?.addEventListener('click', async () => {
       model,
     })
     updateStatus('保存成功。托盘开启“启用自定义 OpenAI 兼容 API”后生效。')
+    await getCurrentWebviewWindow().close()
   } catch (err) {
     logger.error('保存自定义 OpenAI 配置失败', err)
     updateStatus('保存失败，请检查配置格式。', true)
