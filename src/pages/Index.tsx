@@ -24,6 +24,8 @@ type PreferencesSummary = {
   prompt: string;
   model: string;
   opacity: string;
+  customOpenAiEnabled: string;
+  customOpenAiModel: string;
 };
 
 const Index = ({
@@ -164,6 +166,8 @@ const Index = ({
           prompt?: string;
           vlm_model?: string;
           page_opacity?: number;
+          custom_openai_enabled?: boolean;
+          custom_openai_model?: string;
         };
         const normalizedDirection = config.direction_enum
           ? config.direction_enum.toLowerCase()
@@ -177,6 +181,8 @@ const Index = ({
           prompt: config.prompt || "默认提示词",
           model: config.vlm_model || "zai-org/GLM-4.5V",
           opacity: `${Math.round((config.page_opacity ?? 1) * 100)}%`,
+          customOpenAiEnabled: config.custom_openai_enabled ? "已开启" : "未开启",
+          customOpenAiModel: config.custom_openai_model || "gpt-4o",
         });
       } catch (error) {
         console.error("加载配置摘要失败", error);
@@ -282,6 +288,10 @@ const Index = ({
                 </span>
               </div>
               <div>当前大模型：{preferenceSummary.model}</div>
+              <div>
+                自定义 OpenAI 接口：{preferenceSummary.customOpenAiEnabled}
+              </div>
+              <div>自定义 OpenAI 模型：{preferenceSummary.customOpenAiModel}</div>
               <div>当前页面透明度：{preferenceSummary.opacity}</div>
             </div>
           )}

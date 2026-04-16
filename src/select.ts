@@ -25,7 +25,6 @@ selectButton?.addEventListener('click', async () => {
   const llmPrompt = (promptInput as HTMLTextAreaElement).value.trim()
   const selectedDirection = (directionSelect as HTMLSelectElement).value
   const selectedModel = (modelSelect as HTMLSelectElement).value
-
   const vlmKey = (vlmKeyInput as HTMLInputElement).value.trim()
 
   const prompt = templatePattern.test(llmPrompt)
@@ -72,6 +71,7 @@ async function loadPreferences() {
       code_language: string
       prompt: string
       direction_enum: string
+      vlm_key: string
       vlm_model: string
     }
     if (config) {
@@ -86,6 +86,8 @@ async function loadPreferences() {
 
       ;(document.getElementById('prompt-input') as HTMLTextAreaElement).value =
         config.prompt || ''
+      ;(document.getElementById('key-input') as HTMLInputElement).value =
+        config.vlm_key || ''
       ;(document.getElementById('model-select') as HTMLSelectElement).value =
         config.vlm_model || 'zai-org/GLM-4.5V'
     }

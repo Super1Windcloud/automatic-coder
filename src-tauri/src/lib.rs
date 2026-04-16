@@ -75,6 +75,8 @@ pub fn run() {
             create_screenshot_solution_stream,
             set_vlm_key,
             set_vlm_model,
+            set_custom_openai_enabled,
+            save_custom_openai_config,
             set_page_opacity,
             set_background_broadcast,
             get_activation_status,

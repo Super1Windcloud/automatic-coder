@@ -1,5 +1,6 @@
 use crate::config::{
-    open_language_selector, persist_background_broadcast, persist_page_opacity, toggle_vlm_model,
+    open_custom_openai_selector, open_language_selector, persist_background_broadcast,
+    persist_custom_openai_enabled, persist_page_opacity, toggle_vlm_model,
 };
 use crate::utils::{is_dev, toggle_webview_devtools};
 use crate::{app_debug, app_error, app_info};
@@ -209,12 +210,19 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         let state: tauri::State<crate::config::AppState> = app.state();
         *state.background_broadcast.lock().unwrap()
     };
+    let initial_custom_openai_enabled = {
+        let state: tauri::State<crate::config::AppState> = app.state();
+        *state.custom_openai_enabled.lock().unwrap()
+    };
 
     let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+5")).unwrap();
     let code_language =
         MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();
     let toggle_model =
         MenuItem::with_id(app, "toggle_model", "切换模型", true, Some("Alt+4")).unwrap();
+    let custom_openai_settings =
+        MenuItem::with_id(app, "custom_openai_settings", "自定义 OpenAI 接口配置", true, None::<&str>)
+            .unwrap();
     let shortcut_capture =
         MenuItem::with_id(app, "shortcut_capture", "截图", false, Some("Alt+1")).unwrap();
     let shortcut_answer =
@@ -264,6 +272,16 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
     )
     .unwrap();
     let background_broadcast_item = background_broadcast.clone();
+    let custom_openai_enabled = CheckMenuItem::with_id(
+        app,
+        "custom_openai_enabled",
+        "启用自定义 OpenAI 兼容 API",
+        true,
+        initial_custom_openai_enabled,
+        None::<&str>,
+    )
+    .unwrap();
+    let custom_openai_enabled_item = custom_openai_enabled.clone();
     let about_item = MenuItem::with_id(app, "about", "关于", true, Some("")).unwrap();
     let opacity_100 = MenuItem::with_id(app, "page_opacity_100", "100%", true, None::<&str>)
         .unwrap();
@@ -325,6 +343,8 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             &shortcut_help_submenu,
             &code_language,
             &toggle_model,
+            &custom_openai_settings,
+            &custom_openai_enabled,
             &background_broadcast,
             &page_opacity_submenu,
             &quit_i,
@@ -365,6 +385,23 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                             .show()
                             .unwrap()
                     }
+                }
+            },
+            "custom_openai_settings" => {
+                open_custom_openai_selector(app);
+            }
+            "custom_openai_enabled" => match custom_openai_enabled_item.is_checked() {
+                Ok(enabled) => match persist_custom_openai_enabled(app, enabled) {
+                    Ok(saved_enabled) => {
+                        let _ = custom_openai_enabled_item.set_checked(saved_enabled);
+                        app_info!("system", "custom openai changed to {}", saved_enabled);
+                    }
+                    Err(err) => {
+                        app_error!("system", "{err}");
+                    }
+                },
+                Err(err) => {
+                    app_error!("system", "failed to read custom openai menu state: {err}");
                 }
             },
             "background_broadcast" => match background_broadcast_item.is_checked() {

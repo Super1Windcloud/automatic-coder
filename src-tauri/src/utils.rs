@@ -39,14 +39,23 @@ pub fn get_env_key(key_name: &str) -> String {
 
         if result.vlm_key.is_empty() {
             app_warn!("utils", "环境变量 {} 未设置，请设置后重试", key_name);
-            // open_language_selector(app.handle());
-            "sk-pakzoefbduyiqonsznhvnyczilfcjwefjolbvjslcliafefk".to_string()
+            String::new()
         } else {
             #[cfg(target_os = "macos")]
             app_info!("utils", "环境变量 {} 已设置", key_name);
             result.vlm_key.to_string()
         }
     })
+}
+
+pub fn get_custom_openai_config() -> (bool, String, String, String) {
+    let result: PreferencesConfig = load_config("interview-coder-config", "preferences").unwrap();
+    (
+        result.custom_openai_enabled,
+        result.custom_openai_api_key,
+        result.custom_openai_base_url,
+        result.custom_openai_model,
+    )
 }
 
 pub fn toggle_webview_devtools(app: &AppHandle) {

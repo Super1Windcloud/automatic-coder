@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "updater",
-    "code_language_selector"
+    "code_language_selector",
+    "custom_openai_selector"
   ],
   "allowlist": {
     "all": true

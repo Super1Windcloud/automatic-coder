@@ -9,6 +9,9 @@ use confy::load as load_config;
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_VLM_MODEL: &str = "zai-org/GLM-4.5V";
+pub const DEFAULT_OPENAI_COMPAT_BASE_URL: &str = "https://api.openai.com/v1";
+pub const DEFAULT_OPENAI_COMPAT_MODEL: &str = "gpt-4o";
+
 pub fn alternate_vlm_model(current: &str) -> &'static str {
     let _ = current;
     DEFAULT_VLM_MODEL
@@ -30,6 +33,24 @@ fn sanitize_vlm_model(model: &str) -> String {
     }
 }
 
+fn sanitize_openai_compat_model(model: &str) -> String {
+    let model = model.trim();
+    if model.is_empty() {
+        DEFAULT_OPENAI_COMPAT_MODEL.to_string()
+    } else {
+        model.to_string()
+    }
+}
+
+fn sanitize_openai_compat_base_url(base_url: &str) -> String {
+    let base_url = base_url.trim().trim_end_matches('/');
+    if base_url.is_empty() {
+        DEFAULT_OPENAI_COMPAT_BASE_URL.to_string()
+    } else {
+        base_url.to_string()
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(default)]
 pub struct PreferencesConfig {
@@ -40,6 +61,10 @@ pub struct PreferencesConfig {
     pub background_broadcast: bool,
     pub vlm_key: String,
     pub vlm_model: String,
+    pub custom_openai_enabled: bool,
+    pub custom_openai_api_key: String,
+    pub custom_openai_base_url: String,
+    pub custom_openai_model: String,
 }
 
 impl Default for PreferencesConfig {
@@ -52,6 +77,10 @@ impl Default for PreferencesConfig {
             background_broadcast: false,
             vlm_key: String::new(),
             vlm_model: DEFAULT_VLM_MODEL.into(),
+            custom_openai_enabled: false,
+            custom_openai_api_key: String::new(),
+            custom_openai_base_url: DEFAULT_OPENAI_COMPAT_BASE_URL.into(),
+            custom_openai_model: DEFAULT_OPENAI_COMPAT_MODEL.into(),
         }
     }
 }
@@ -63,6 +92,9 @@ pub struct AppState {
     pub(crate) page_opacity: Mutex<f64>,
     pub(crate) background_broadcast: Mutex<bool>,
     pub(crate) vlm_model: Mutex<String>,
+    pub(crate) custom_openai_enabled: Mutex<bool>,
+    pub(crate) custom_openai_base_url: Mutex<String>,
+    pub(crate) custom_openai_model: Mutex<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -89,6 +121,19 @@ pub fn load_preferences(app: &mut App) {
         {
             let mut model_guard = state.vlm_model.lock().unwrap();
             *model_guard = sanitize_vlm_model(&preferences.vlm_model);
+        }
+        {
+            let mut enabled_guard = state.custom_openai_enabled.lock().unwrap();
+            *enabled_guard = preferences.custom_openai_enabled;
+        }
+        {
+            let mut base_url_guard = state.custom_openai_base_url.lock().unwrap();
+            *base_url_guard =
+                sanitize_openai_compat_base_url(&preferences.custom_openai_base_url);
+        }
+        {
+            let mut model_guard = state.custom_openai_model.lock().unwrap();
+            *model_guard = sanitize_openai_compat_model(&preferences.custom_openai_model);
         }
         {
             let mut background_broadcast_guard = state.background_broadcast.lock().unwrap();
@@ -175,11 +220,8 @@ pub fn set_background_broadcast(app_handle: AppHandle, enabled: bool) -> Result<
 
 #[tauri::command]
 pub fn set_vlm_key(key: String) {
-    if key.is_empty() {
-        return;
-    }
     let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences").unwrap();
-    cfg.vlm_key = key;
+    cfg.vlm_key = key.trim().to_string();
     confy::store("interview-coder-config", "preferences", cfg).unwrap();
 }
 
@@ -219,11 +261,61 @@ pub fn toggle_vlm_model(app_handle: &AppHandle) -> Result<String, String> {
         .vlm_model
         .lock()
         .map_err(|_| "模型状态锁获取失败".to_string())?;
-    let target = alternate_vlm_model(guard.as_str());
-    *guard = target.to_string();
-    persist_vlm_model_value(target)?;
+    let target = alternate_vlm_model(guard.as_str()).to_string();
+    *guard = target.clone();
+    persist_vlm_model_value(&target)?;
 
-    Ok(target.to_string())
+    Ok(target)
+}
+
+pub fn persist_custom_openai_enabled(app_handle: &AppHandle, enabled: bool) -> Result<bool, String> {
+    let state: State<AppState> = app_handle.state();
+    *state
+        .custom_openai_enabled
+        .lock()
+        .map_err(|_| "自定义 OpenAI 开关状态锁获取失败".to_string())? = enabled;
+
+    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences")
+        .map_err(|err| format!("加载配置失败: {err}"))?;
+    cfg.custom_openai_enabled = enabled;
+    confy::store("interview-coder-config", "preferences", cfg)
+        .map_err(|err| format!("保存配置失败: {err}"))?;
+
+    Ok(enabled)
+}
+
+#[tauri::command]
+pub fn set_custom_openai_enabled(app_handle: AppHandle, enabled: bool) -> Result<bool, String> {
+    persist_custom_openai_enabled(&app_handle, enabled)
+}
+
+#[tauri::command]
+pub fn save_custom_openai_config(
+    app_handle: AppHandle,
+    api_key: String,
+    base_url: String,
+    model: String,
+) -> Result<(), String> {
+    let normalized_base_url = sanitize_openai_compat_base_url(&base_url);
+    let normalized_model = sanitize_openai_compat_model(&model);
+    let state: State<AppState> = app_handle.state();
+    *state
+        .custom_openai_base_url
+        .lock()
+        .map_err(|_| "自定义 OpenAI 接口地址状态锁获取失败".to_string())? =
+        normalized_base_url.clone();
+    *state
+        .custom_openai_model
+        .lock()
+        .map_err(|_| "自定义 OpenAI 模型状态锁获取失败".to_string())? = normalized_model.clone();
+
+    let mut cfg: PreferencesConfig = confy::load("interview-coder-config", "preferences")
+        .map_err(|err| format!("加载配置失败: {err}"))?;
+    cfg.custom_openai_api_key = api_key.trim().to_string();
+    cfg.custom_openai_base_url = normalized_base_url;
+    cfg.custom_openai_model = normalized_model;
+    confy::store("interview-coder-config", "preferences", cfg)
+        .map_err(|err| format!("保存配置失败: {err}"))
 }
 
 #[tauri::command]
@@ -295,6 +387,46 @@ pub fn open_language_selector(app_handle: &AppHandle) {
 
     let webview_window = WebviewWindowBuilder::new(app_handle, "code_language_selector", url)
         .inner_size(600.0, 800.0)
+        .build()
+        .unwrap();
+
+    webview_window.center().unwrap();
+    webview_window.set_focus().unwrap();
+    webview_window.set_content_protected(true).unwrap();
+    webview_window.set_decorations(false).unwrap();
+    webview_window.set_skip_taskbar(true).unwrap();
+    webview_window.set_enabled(true).unwrap();
+    webview_window.set_always_on_top(false).unwrap();
+    webview_window.show().unwrap();
+}
+
+pub fn open_custom_openai_selector(app_handle: &AppHandle) {
+    if app_handle
+        .get_webview_window("custom_openai_selector")
+        .is_some()
+    {
+        app_handle
+            .get_webview_window("custom_openai_selector")
+            .unwrap()
+            .set_always_on_top(true)
+            .unwrap();
+        app_handle
+            .get_webview_window("custom_openai_selector")
+            .unwrap()
+            .set_focus()
+            .unwrap();
+
+        return;
+    }
+
+    let url = if is_dev() {
+        WebviewUrl::App("openai.html".into())
+    } else {
+        WebviewUrl::App("openai/openai.html".into())
+    };
+
+    let webview_window = WebviewWindowBuilder::new(app_handle, "custom_openai_selector", url)
+        .inner_size(600.0, 560.0)
         .build()
         .unwrap();
 

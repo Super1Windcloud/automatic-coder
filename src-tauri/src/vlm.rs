@@ -2,7 +2,7 @@
 
 use crate::capture::capture_screen_png_bytes;
 use crate::config::{AppState, DEFAULT_VLM_MODEL, alternate_vlm_model, persist_vlm_model};
-use crate::utils::get_env_key;
+use crate::utils::{get_custom_openai_config, get_env_key};
 use crate::{app_debug, app_error, app_info, app_warn};
 use base64::{Engine, engine::general_purpose};
 use reqwest::{Client, StatusCode};
@@ -27,6 +27,7 @@ enum VlmError {
     Api(String),
     EmptyResponse,
     Timeout(&'static str),
+    Config(String),
 }
 
 impl fmt::Display for VlmError {
@@ -44,6 +45,7 @@ impl fmt::Display for VlmError {
             VlmError::Api(message) => write!(f, "API 错误: {message}"),
             VlmError::EmptyResponse => write!(f, "LLM 返回空内容"),
             VlmError::Timeout(context) => write!(f, "{context}，操作超时 (5s)"),
+            VlmError::Config(message) => write!(f, "配置错误: {message}"),
         }
     }
 }
@@ -145,6 +147,20 @@ async fn request_chat_completion_stream(
     prompt: String,
     image_url: String,
 ) -> Result<String, VlmError> {
+    let (custom_openai_enabled, custom_api_key, custom_base_url, custom_model) =
+        get_custom_openai_config();
+    if custom_openai_enabled {
+        return request_custom_openai_stream(
+            app_handle,
+            &sanitize_custom_model(&custom_model),
+            &sanitize_custom_base_url(&custom_base_url),
+            &custom_api_key,
+            prompt,
+            image_url,
+        )
+        .await;
+    }
+
     app_info!("vlm", "request started with model: {model}");
     let messages = json!([
         {
@@ -167,6 +183,9 @@ async fn request_chat_completion_stream(
     ]);
 
     let api_key = get_env_key("SiliconflowVLM");
+    if api_key.trim().is_empty() {
+        return Err(VlmError::Config("请先在设置中填写 API Key".into()));
+    }
     let client = Client::new();
 
     let body = if model == "zai-org/GLM-4.5V"
@@ -318,9 +337,172 @@ async fn request_chat_completion_stream(
     Ok(result)
 }
 
+fn sanitize_custom_base_url(base_url: &str) -> String {
+    let normalized = base_url.trim().trim_end_matches('/');
+    if normalized.is_empty() {
+        "https://api.openai.com/v1".to_string()
+    } else {
+        normalized.to_string()
+    }
+}
+
+fn sanitize_custom_model(model: &str) -> String {
+    let normalized = model.trim();
+    if normalized.is_empty() {
+        "gpt-4o".to_string()
+    } else {
+        normalized.to_string()
+    }
+}
+
+async fn request_custom_openai_stream(
+    app_handle: &AppHandle,
+    model: &str,
+    base_url: &str,
+    api_key: &str,
+    prompt: String,
+    image_url: String,
+) -> Result<String, VlmError> {
+    app_info!(
+        "vlm",
+        "request started with custom openai-compatible api: model={}, base_url={}",
+        model,
+        base_url
+    );
+
+    if api_key.trim().is_empty() {
+        return Err(VlmError::Config(
+            "已启用自定义 OpenAI 兼容 API，但尚未填写 API Key".into(),
+        ));
+    }
+
+    let messages = json!([
+        {
+            "role": "system",
+            "content": prompt
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url,
+                        "detail": "high"
+                    }
+                }
+            ]
+        }
+    ]);
+
+    let body = json!({
+        "model": model,
+        "stream": true,
+        "messages": messages
+    });
+
+    let endpoint = format!("{}/chat/completions", base_url);
+    let client = Client::new();
+    let send_future = client
+        .post(endpoint)
+        .bearer_auth(api_key)
+        .json(&body)
+        .send();
+
+    let mut res = timeout(Duration::from_secs(5), send_future)
+        .await
+        .map_err(|_| VlmError::Timeout("自定义 OpenAI 接口请求"))?
+        .map_err(VlmError::Request)?;
+
+    if let Err(status_err) = res.error_for_status_ref() {
+        let status = status_err
+            .status()
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let body = res.text().await.unwrap_or_default();
+        return Err(VlmError::Status { code: status, body });
+    }
+
+    let mut result = String::new();
+    let mut finished = false;
+    while let Some(chunk) = timeout(Duration::from_secs(5), res.chunk())
+        .await
+        .map_err(|_| VlmError::Timeout("自定义 OpenAI 流式响应"))?
+        .map_err(VlmError::Chunk)?
+    {
+        let text = String::from_utf8_lossy(&chunk);
+        for line in text.lines() {
+            if let Some(data) = line.strip_prefix("data: ") {
+                let trimmed = data.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if trimmed == "[DONE]" {
+                    let _ = app_handle.emit("completion_done", "");
+                    finished = true;
+                    break;
+                }
+
+                let json_chunk: Value =
+                    serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
+                        raw: trimmed.to_string(),
+                        source,
+                    })?;
+
+                if let Some(error) = json_chunk.get("error") {
+                    let message = error
+                        .get("message")
+                        .and_then(|val| val.as_str())
+                        .map(|val| val.to_string())
+                        .unwrap_or_else(|| error.to_string());
+                    return Err(VlmError::Api(message));
+                }
+
+                let Some(choice) = json_chunk
+                    .get("choices")
+                    .and_then(|choices| choices.as_array())
+                    .and_then(|choices| choices.first())
+                else {
+                    continue;
+                };
+
+                let mut appended = false;
+                if let Some(delta_obj) = choice.get("delta") {
+                    appended |=
+                        append_delta_field(app_handle, delta_obj.get("content"), &mut result);
+                }
+                if let Some(message_obj) = choice.get("message") {
+                    appended |=
+                        append_delta_field(app_handle, message_obj.get("content"), &mut result);
+                }
+
+                if !appended {
+                    continue;
+                }
+            }
+        }
+        if finished {
+            break;
+        }
+    }
+
+    if !finished {
+        return Err(VlmError::StreamShape(
+            "自定义 OpenAI 流式响应未发送结束标记".into(),
+        ));
+    }
+    if result.trim().is_empty() {
+        return Err(VlmError::EmptyResponse);
+    }
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<String, String> {
     let state = app_handle.state::<AppState>();
+    let custom_openai_enabled = {
+        let (enabled, _, _, _) = get_custom_openai_config();
+        enabled
+    };
     let prompt = state.prompt.lock().unwrap().clone();
     let direction = *state
         .capture_position
@@ -349,7 +531,7 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
         .await
     {
         Ok(result) => Ok(result),
-        Err(err) if err.is_model_disabled() => {
+        Err(err) if err.is_model_disabled() && !custom_openai_enabled => {
             let fallback_model = alternate_vlm_model(&model_name).to_string();
             if fallback_model == model_name {
                 log_vlm_error("request_chat_completion_stream", &model_name, &err);

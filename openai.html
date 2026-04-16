@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>自定义 OpenAI 接口配置</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        padding: 0;
+        margin: 0;
+        background: linear-gradient(135deg, #0a2235, #06131d);
+        display: flex;
+        width: 100vw;
+        height: 100vh;
+        color: #e8f1f8;
+        overflow: hidden;
+      }
+
+      .card {
+        position: relative;
+        background: #0f2233;
+        padding: 28px;
+        box-sizing: border-box;
+        width: 100vw;
+        height: 100vh;
+        overflow-y: auto;
+      }
+
+      .close-button {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #dcefff;
+        font-size: 22px;
+        line-height: 1;
+        app-region: no-drag;
+        -webkit-app-region: no-drag;
+      }
+
+      .close-button:hover {
+        background: rgba(255, 255, 255, 0.16);
+      }
+
+      .drag-bar {
+        margin: -10px -10px 18px;
+        padding: 10px 52px 10px 10px;
+        border-radius: 12px;
+        cursor: grab;
+        user-select: none;
+        background: rgba(255, 255, 255, 0.04);
+        app-region: drag;
+        -webkit-app-region: drag;
+      }
+
+      .drag-tip {
+        text-align: center;
+        color: #9fc0d8;
+        font-size: 13px;
+      }
+
+      .drag-bar h2,
+      .drag-bar .drag-tip {
+        margin-left: auto;
+        margin-right: auto;
+        width: fit-content;
+        user-select: none;
+        app-region: drag;
+        -webkit-app-region: drag;
+      }
+
+      h2 {
+        text-align: center;
+        margin: 0 0 8px;
+        color: #dff3ff;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: bold;
+        color: #d0e4f1;
+      }
+
+      input {
+        font-size: 16px;
+        padding: 10px;
+        width: 100%;
+        border: 1px solid #355066;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        background: #091723;
+        color: #f3fbff;
+        box-sizing: border-box;
+        app-region: no-drag;
+        -webkit-app-region: no-drag;
+      }
+
+      input:focus {
+        border-color: #56b6e6;
+        box-shadow: 0 0 0 3px rgba(86, 182, 230, 0.25);
+        outline: none;
+      }
+
+      .hint {
+        margin: -10px 0 14px;
+        color: #9bb8ca;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      button {
+        width: 100%;
+        padding: 12px;
+        font-size: 16px;
+        border: none;
+        border-radius: 8px;
+        background: #1b8fcb;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        app-region: no-drag;
+        -webkit-app-region: no-drag;
+      }
+
+      button:hover {
+        background: #167db1;
+      }
+
+      .status {
+        display: none;
+        margin-top: 14px;
+        font-size: 13px;
+        color: #8be0ad;
+      }
+
+      .status.error {
+        color: #ff8e8e;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <button id="close-button" class="close-button" type="button" aria-label="关闭">
+        ×
+      </button>
+      <div class="drag-bar" data-tauri-drag-region>
+        <h2>自定义 OpenAI 兼容 API</h2>
+        <div class="drag-tip">这里只配置兼容接口本身，是否启用由托盘菜单单独控制</div>
+      </div>
+
+      <label for="base-url-input">Base URL</label>
+      <input
+        type="text"
+        id="base-url-input"
+        placeholder="例如 https://api.openai.com/v1"
+      />
+      <div class="hint">只填基础地址，程序会自动请求 <code>/chat/completions</code>。</div>
+
+      <label for="api-key-input">API Key</label>
+      <input type="text" id="api-key-input" placeholder="输入你自己的 API Key" />
+
+      <label for="model-input">Model</label>
+      <input type="text" id="model-input" placeholder="例如 gpt-4o / qwen-vl-max / glm-4.5v" />
+      <div class="hint">这里填写供应商要求的实际模型名。</div>
+
+      <button id="save-button" type="button">保存配置</button>
+      <div id="status-box" class="status"></div>
+    </div>
+
+    <script type="module" src="/src/openai.ts"></script>
+  </body>
+</html>
