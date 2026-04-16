@@ -214,6 +214,10 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         let state: tauri::State<crate::config::AppState> = app.state();
         *state.custom_openai_enabled.lock().unwrap()
     };
+    let initial_page_opacity = {
+        let state: tauri::State<crate::config::AppState> = app.state();
+        *state.page_opacity.lock().unwrap()
+    };
 
     let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+5")).unwrap();
     let code_language =
@@ -283,24 +287,98 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
     .unwrap();
     let custom_openai_enabled_item = custom_openai_enabled.clone();
     let about_item = MenuItem::with_id(app, "about", "关于", true, Some("")).unwrap();
-    let opacity_100 = MenuItem::with_id(app, "page_opacity_100", "100%", true, None::<&str>)
-        .unwrap();
-    let opacity_90 =
-        MenuItem::with_id(app, "page_opacity_90", "90%", true, None::<&str>).unwrap();
-    let opacity_80 =
-        MenuItem::with_id(app, "page_opacity_80", "80%", true, None::<&str>).unwrap();
-    let opacity_70 =
-        MenuItem::with_id(app, "page_opacity_70", "70%", true, None::<&str>).unwrap();
-    let opacity_60 =
-        MenuItem::with_id(app, "page_opacity_60", "60%", true, None::<&str>).unwrap();
-    let opacity_50 =
-        MenuItem::with_id(app, "page_opacity_50", "50%", true, None::<&str>).unwrap();
-    let opacity_40 =
-        MenuItem::with_id(app, "page_opacity_40", "40%", true, None::<&str>).unwrap();
-    let opacity_30 =
-        MenuItem::with_id(app, "page_opacity_30", "30%", true, None::<&str>).unwrap();
-    let opacity_20 =
-        MenuItem::with_id(app, "page_opacity_20", "20%", true, None::<&str>).unwrap();
+    let opacity_100 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_100",
+        "100%",
+        true,
+        is_same_opacity(initial_page_opacity, 1.0),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_90 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_90",
+        "90%",
+        true,
+        is_same_opacity(initial_page_opacity, 0.9),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_80 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_80",
+        "80%",
+        true,
+        is_same_opacity(initial_page_opacity, 0.8),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_70 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_70",
+        "70%",
+        true,
+        is_same_opacity(initial_page_opacity, 0.7),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_60 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_60",
+        "60%",
+        true,
+        is_same_opacity(initial_page_opacity, 0.6),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_50 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_50",
+        "50%",
+        true,
+        is_same_opacity(initial_page_opacity, 0.5),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_40 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_40",
+        "40%",
+        true,
+        is_same_opacity(initial_page_opacity, 0.4),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_30 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_30",
+        "30%",
+        true,
+        is_same_opacity(initial_page_opacity, 0.3),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_20 = CheckMenuItem::with_id(
+        app,
+        "page_opacity_20",
+        "20%",
+        true,
+        is_same_opacity(initial_page_opacity, 0.2),
+        None::<&str>,
+    )
+    .unwrap();
+    let opacity_items = vec![
+        (opacity_100.clone(), 1.0),
+        (opacity_90.clone(), 0.9),
+        (opacity_80.clone(), 0.8),
+        (opacity_70.clone(), 0.7),
+        (opacity_60.clone(), 0.6),
+        (opacity_50.clone(), 0.5),
+        (opacity_40.clone(), 0.4),
+        (opacity_30.clone(), 0.3),
+        (opacity_20.clone(), 0.2),
+    ];
     let page_opacity_submenu = Submenu::with_items(
         app,
         "页面透明度",
@@ -418,15 +496,15 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                     app_error!("system", "failed to read background broadcast menu state: {err}");
                 }
             },
-            "page_opacity_100" => apply_page_opacity_from_tray(app, 1.0),
-            "page_opacity_90" => apply_page_opacity_from_tray(app, 0.9),
-            "page_opacity_80" => apply_page_opacity_from_tray(app, 0.8),
-            "page_opacity_70" => apply_page_opacity_from_tray(app, 0.7),
-            "page_opacity_60" => apply_page_opacity_from_tray(app, 0.6),
-            "page_opacity_50" => apply_page_opacity_from_tray(app, 0.5),
-            "page_opacity_40" => apply_page_opacity_from_tray(app, 0.4),
-            "page_opacity_30" => apply_page_opacity_from_tray(app, 0.3),
-            "page_opacity_20" => apply_page_opacity_from_tray(app, 0.2),
+            "page_opacity_100" => apply_page_opacity_from_tray(app, 1.0, &opacity_items),
+            "page_opacity_90" => apply_page_opacity_from_tray(app, 0.9, &opacity_items),
+            "page_opacity_80" => apply_page_opacity_from_tray(app, 0.8, &opacity_items),
+            "page_opacity_70" => apply_page_opacity_from_tray(app, 0.7, &opacity_items),
+            "page_opacity_60" => apply_page_opacity_from_tray(app, 0.6, &opacity_items),
+            "page_opacity_50" => apply_page_opacity_from_tray(app, 0.5, &opacity_items),
+            "page_opacity_40" => apply_page_opacity_from_tray(app, 0.4, &opacity_items),
+            "page_opacity_30" => apply_page_opacity_from_tray(app, 0.3, &opacity_items),
+            "page_opacity_20" => apply_page_opacity_from_tray(app, 0.2, &opacity_items),
             "about" => show_about_dialog(app),
             _ => {}
         })
@@ -449,9 +527,24 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         .unwrap();
 }
 
-fn apply_page_opacity_from_tray(app: &AppHandle, opacity: f64) {
+fn is_same_opacity(left: f64, right: f64) -> bool {
+    (left - right).abs() < 0.01
+}
+
+fn sync_page_opacity_menu_state(opacity_items: &[(CheckMenuItem<Wry>, f64)], opacity: f64) {
+    for (item, value) in opacity_items {
+        let _ = item.set_checked(is_same_opacity(*value, opacity));
+    }
+}
+
+fn apply_page_opacity_from_tray(
+    app: &AppHandle,
+    opacity: f64,
+    opacity_items: &[(CheckMenuItem<Wry>, f64)],
+) {
     match persist_page_opacity(app, opacity) {
         Ok(value) => {
+            sync_page_opacity_menu_state(opacity_items, value);
             app_info!("system", "page opacity changed to {}", value);
             if is_dev() {
                 let _ = app

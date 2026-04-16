@@ -88,9 +88,9 @@ pub fn run() {
             } else {
                 app_info!("app", "startup log file cleared");
             }
+            load_preferences(app);
             create_tray_icon(app);
             create_shortcut(app);
-            load_preferences(app);
             check_activation_status(app);
             Ok(())
         })
