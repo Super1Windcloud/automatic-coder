@@ -83,7 +83,12 @@ fn append_delta_field(app_handle: &AppHandle, field: Option<&Value>, buffer: &mu
             Value::String(text) => appended |= append_segment(app_handle, buffer, text),
             Value::Array(items) => {
                 for item in items {
-                    if let Some(text) = item.get("text").and_then(|node| node.as_str()) {
+                    if let Some(text) = item
+                        .get("text")
+                        .or_else(|| item.get("output_text"))
+                        .or_else(|| item.get("content"))
+                        .and_then(|node| node.as_str())
+                    {
                         appended |= append_segment(app_handle, buffer, text);
                     }
                 }
@@ -105,7 +110,12 @@ fn collect_plain_chunk(field: Option<&Value>) -> Option<String> {
             }
             Value::Array(items) => {
                 for item in items {
-                    if let Some(text) = item.get("text").and_then(|node| node.as_str()) {
+                    if let Some(text) = item
+                        .get("text")
+                        .or_else(|| item.get("output_text"))
+                        .or_else(|| item.get("content"))
+                        .and_then(|node| node.as_str())
+                    {
                         if !text.is_empty() {
                             chunk.push_str(text);
                         }
@@ -148,18 +158,149 @@ fn is_stream_finished(choice: &Value) -> bool {
         .is_some_and(|reason| !reason.is_empty() && reason != "null")
 }
 
-fn extract_sse_lines(buffer: &mut String) -> Vec<String> {
+fn extract_sse_events(buffer: &mut String, flush_tail: bool) -> Vec<String> {
     let normalized = buffer.replace("\r\n", "\n").replace('\r', "\n");
     *buffer = normalized;
 
-    let mut lines = Vec::new();
-    while let Some(pos) = buffer.find('\n') {
-        let line = buffer[..pos].to_string();
-        let rest = buffer[pos + 1..].to_string();
-        lines.push(line);
+    let mut events = Vec::new();
+    while let Some(pos) = buffer.find("\n\n") {
+        let event = buffer[..pos].to_string();
+        let rest = buffer[pos + 2..].to_string();
+        if !event.trim().is_empty() {
+            events.push(event);
+        }
         *buffer = rest;
     }
-    lines
+
+    if flush_tail && !buffer.trim().is_empty() {
+        events.push(buffer.trim().to_string());
+        buffer.clear();
+    }
+
+    events
+}
+
+fn event_payload(event: &str) -> Option<String> {
+    let mut data_lines = Vec::new();
+    for line in event.lines() {
+        if let Some(data) = line
+            .strip_prefix("data: ")
+            .or_else(|| line.strip_prefix("data:"))
+        {
+            data_lines.push(data.trim_end());
+        }
+    }
+
+    if data_lines.is_empty() {
+        None
+    } else {
+        Some(data_lines.join("\n").trim().to_string())
+    }
+}
+
+fn extract_choice(json_chunk: &Value) -> Option<&Value> {
+    json_chunk
+        .get("choices")
+        .and_then(|choices| choices.as_array())
+        .and_then(|choices| choices.first())
+}
+
+fn append_choice_content(app_handle: &AppHandle, choice: &Value, result: &mut String) -> bool {
+    let mut appended = false;
+    if let Some(delta_obj) = choice.get("delta") {
+        appended |= append_delta_field(app_handle, delta_obj.get("content"), result);
+        if let Some(reasoning) = collect_plain_chunk(delta_obj.get("reasoning_content")) {
+            app_debug!("vlm", "reasoning_content: {}", reasoning);
+        }
+    }
+    if let Some(message_obj) = choice.get("message") {
+        appended |= append_delta_field(app_handle, message_obj.get("content"), result);
+        if let Some(reasoning) = collect_plain_chunk(message_obj.get("reasoning_content")) {
+            app_debug!("vlm", "reasoning_content: {}", reasoning);
+        }
+    }
+    if let Some(text) = json_chunk_text(choice) {
+        appended |= append_segment(app_handle, result, &text);
+    }
+    appended
+}
+
+fn json_chunk_text(value: &Value) -> Option<String> {
+    if let Some(text) = value.get("text").and_then(|node| node.as_str()) {
+        if !text.is_empty() {
+            return Some(text.to_string());
+        }
+    }
+    if let Some(text) = value.get("output_text").and_then(|node| node.as_str()) {
+        if !text.is_empty() {
+            return Some(text.to_string());
+        }
+    }
+    if let Some(content) = value.get("content") {
+        return collect_plain_chunk(Some(content));
+    }
+    None
+}
+
+fn handle_openai_event(
+    app_handle: &AppHandle,
+    trimmed: &str,
+    result: &mut String,
+    finished: &mut bool,
+    strict_choices: bool,
+) -> Result<(), VlmError> {
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if trimmed == "[DONE]" {
+        let _ = app_handle.emit("completion_done", "");
+        *finished = true;
+        return Ok(());
+    }
+
+    let json_chunk: Value = serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
+        raw: trimmed.to_string(),
+        source,
+    })?;
+
+    if let Some(error) = json_chunk.get("error") {
+        let message = error
+            .get("message")
+            .and_then(|val| val.as_str())
+            .map(|val| val.to_string())
+            .unwrap_or_else(|| error.to_string());
+        return Err(VlmError::Api(message));
+    }
+
+    let Some(choice) = extract_choice(&json_chunk) else {
+        if strict_choices {
+            return Err(VlmError::StreamShape(format!(
+                "响应缺少 choices 字段，原始片段: {}",
+                trimmed
+            )));
+        }
+        if let Some(text) = json_chunk_text(&json_chunk) {
+            append_segment(app_handle, result, &text);
+        }
+        return Ok(());
+    };
+
+    if is_stream_finished(choice) {
+        let _ = app_handle.emit("completion_done", "");
+        *finished = true;
+        return Ok(());
+    }
+
+    let appended = append_choice_content(app_handle, choice, result);
+    if !appended && strict_choices && choice.get("delta").is_none() && choice.get("message").is_none()
+    {
+        return Err(VlmError::StreamShape(format!(
+            "响应缺少 delta 或 message 字段，原始片段: {}",
+            trimmed
+        )));
+    }
+
+    Ok(())
 }
 
 async fn request_chat_completion_stream(
@@ -263,96 +404,11 @@ async fn request_chat_completion_stream(
         let text = String::from_utf8_lossy(&chunk);
         pending.push_str(&text);
 
-        for line in extract_sse_lines(&mut pending) {
-            if let Some(data) = line
-                .strip_prefix("data: ")
-                .or_else(|| line.strip_prefix("data:"))
-            {
-                let trimmed = data.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if trimmed == "[DONE]" {
-                    let _ = app_handle.emit("completion_done", "");
-                    finished = true;
+        for event in extract_sse_events(&mut pending, false) {
+            if let Some(payload) = event_payload(&event) {
+                handle_openai_event(app_handle, &payload, &mut result, &mut finished, true)?;
+                if finished {
                     break;
-                }
-
-                let json_chunk: Value =
-                    serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
-                        raw: trimmed.to_string(),
-                        source,
-                    })?;
-
-                if let Some(error) = json_chunk.get("error") {
-                    let message = error
-                        .get("message")
-                        .and_then(|val| val.as_str())
-                        .map(|val| val.to_string())
-                        .unwrap_or_else(|| error.to_string());
-                    return Err(VlmError::Api(message));
-                }
-
-                let Some(choices) = json_chunk
-                    .get("choices")
-                    .and_then(|choices| choices.as_array())
-                else {
-                    return Err(VlmError::StreamShape(format!(
-                        "响应缺少 choices 字段，原始片段: {}",
-                        trimmed
-                    )));
-                };
-
-                if choices.is_empty() {
-                    app_debug!(
-                        "vlm",
-                        "skip empty choices chunk for model {}: {}",
-                        model,
-                        trimmed
-                    );
-                    continue;
-                }
-
-                let choice = choices.first().ok_or_else(|| {
-                    VlmError::StreamShape(format!("响应缺少 choices 字段，原始片段: {}", trimmed))
-                })?;
-
-                if is_stream_finished(choice) {
-                    let _ = app_handle.emit("completion_done", "");
-                    finished = true;
-                    break;
-                }
-
-                let delta = choice.get("delta");
-                let message = choice.get("message");
-                if delta.is_none() && message.is_none() {
-                    return Err(VlmError::StreamShape(format!(
-                        "响应缺少 delta 或 message 字段，原始片段: {}",
-                        trimmed
-                    )));
-                }
-
-                let mut appended = false;
-                if let Some(delta_obj) = delta {
-                    appended |=
-                        append_delta_field(app_handle, delta_obj.get("content"), &mut result);
-                    if let Some(reasoning) = collect_plain_chunk(delta_obj.get("reasoning_content"))
-                    {
-                        app_debug!("vlm", "reasoning_content: {}", reasoning);
-                    }
-                }
-                if let Some(message_obj) = message {
-                    appended |=
-                        append_delta_field(app_handle, message_obj.get("content"), &mut result);
-                    if let Some(reasoning) =
-                        collect_plain_chunk(message_obj.get("reasoning_content"))
-                    {
-                        app_debug!("vlm", "reasoning_content: {}", reasoning);
-                    }
-                }
-
-                if !appended {
-                    continue;
                 }
             }
         }
@@ -361,63 +417,11 @@ async fn request_chat_completion_stream(
         }
     }
     if !pending.trim().is_empty() && !finished {
-        for line in extract_sse_lines(&mut format!("{pending}\n")) {
-            if let Some(data) = line
-                .strip_prefix("data: ")
-                .or_else(|| line.strip_prefix("data:"))
-            {
-                let trimmed = data.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if trimmed == "[DONE]" {
-                    let _ = app_handle.emit("completion_done", "");
-                    finished = true;
+        for event in extract_sse_events(&mut pending, true) {
+            if let Some(payload) = event_payload(&event) {
+                handle_openai_event(app_handle, &payload, &mut result, &mut finished, true)?;
+                if finished {
                     break;
-                }
-
-                let json_chunk: Value =
-                    serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
-                        raw: trimmed.to_string(),
-                        source,
-                    })?;
-
-                if let Some(error) = json_chunk.get("error") {
-                    let message = error
-                        .get("message")
-                        .and_then(|val| val.as_str())
-                        .map(|val| val.to_string())
-                        .unwrap_or_else(|| error.to_string());
-                    return Err(VlmError::Api(message));
-                }
-
-                let Some(choices) = json_chunk.get("choices").and_then(|choices| choices.as_array())
-                else {
-                    return Err(VlmError::StreamShape(format!(
-                        "响应缺少 choices 字段，原始片段: {}",
-                        trimmed
-                    )));
-                };
-
-                if choices.is_empty() {
-                    continue;
-                }
-
-                let choice = choices.first().ok_or_else(|| {
-                    VlmError::StreamShape(format!("响应缺少 choices 字段，原始片段: {}", trimmed))
-                })?;
-
-                if is_stream_finished(choice) {
-                    let _ = app_handle.emit("completion_done", "");
-                    finished = true;
-                    break;
-                }
-
-                if let Some(delta_obj) = choice.get("delta") {
-                    append_delta_field(app_handle, delta_obj.get("content"), &mut result);
-                }
-                if let Some(message_obj) = choice.get("message") {
-                    append_delta_field(app_handle, message_obj.get("content"), &mut result);
                 }
             }
         }
@@ -531,62 +535,11 @@ async fn request_custom_openai_stream(
     {
         let text = String::from_utf8_lossy(&chunk);
         pending.push_str(&text);
-        for line in extract_sse_lines(&mut pending) {
-            if let Some(data) = line
-                .strip_prefix("data: ")
-                .or_else(|| line.strip_prefix("data:"))
-            {
-                let trimmed = data.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if trimmed == "[DONE]" {
-                    let _ = app_handle.emit("completion_done", "");
-                    finished = true;
+        for event in extract_sse_events(&mut pending, false) {
+            if let Some(payload) = event_payload(&event) {
+                handle_openai_event(app_handle, &payload, &mut result, &mut finished, false)?;
+                if finished {
                     break;
-                }
-
-                let json_chunk: Value =
-                    serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
-                        raw: trimmed.to_string(),
-                        source,
-                    })?;
-
-                if let Some(error) = json_chunk.get("error") {
-                    let message = error
-                        .get("message")
-                        .and_then(|val| val.as_str())
-                        .map(|val| val.to_string())
-                        .unwrap_or_else(|| error.to_string());
-                    return Err(VlmError::Api(message));
-                }
-
-                let Some(choice) = json_chunk
-                    .get("choices")
-                    .and_then(|choices| choices.as_array())
-                    .and_then(|choices| choices.first())
-                else {
-                    continue;
-                };
-
-                if is_stream_finished(choice) {
-                    let _ = app_handle.emit("completion_done", "");
-                    finished = true;
-                    break;
-                }
-
-                let mut appended = false;
-                if let Some(delta_obj) = choice.get("delta") {
-                    appended |=
-                        append_delta_field(app_handle, delta_obj.get("content"), &mut result);
-                }
-                if let Some(message_obj) = choice.get("message") {
-                    appended |=
-                        append_delta_field(app_handle, message_obj.get("content"), &mut result);
-                }
-
-                if !appended {
-                    continue;
                 }
             }
         }
@@ -596,55 +549,11 @@ async fn request_custom_openai_stream(
     }
 
     if !pending.trim().is_empty() && !finished {
-        for line in extract_sse_lines(&mut format!("{pending}\n")) {
-            if let Some(data) = line
-                .strip_prefix("data: ")
-                .or_else(|| line.strip_prefix("data:"))
-            {
-                let trimmed = data.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if trimmed == "[DONE]" {
-                    let _ = app_handle.emit("completion_done", "");
-                    finished = true;
+        for event in extract_sse_events(&mut pending, true) {
+            if let Some(payload) = event_payload(&event) {
+                handle_openai_event(app_handle, &payload, &mut result, &mut finished, false)?;
+                if finished {
                     break;
-                }
-
-                let json_chunk: Value =
-                    serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
-                        raw: trimmed.to_string(),
-                        source,
-                    })?;
-
-                if let Some(error) = json_chunk.get("error") {
-                    let message = error
-                        .get("message")
-                        .and_then(|val| val.as_str())
-                        .map(|val| val.to_string())
-                        .unwrap_or_else(|| error.to_string());
-                    return Err(VlmError::Api(message));
-                }
-
-                let Some(choice) = json_chunk
-                    .get("choices")
-                    .and_then(|choices| choices.as_array())
-                    .and_then(|choices| choices.first())
-                else {
-                    continue;
-                };
-
-                if is_stream_finished(choice) {
-                    let _ = app_handle.emit("completion_done", "");
-                    finished = true;
-                    break;
-                }
-
-                if let Some(delta_obj) = choice.get("delta") {
-                    append_delta_field(app_handle, delta_obj.get("content"), &mut result);
-                }
-                if let Some(message_obj) = choice.get("message") {
-                    append_delta_field(app_handle, message_obj.get("content"), &mut result);
                 }
             }
         }
