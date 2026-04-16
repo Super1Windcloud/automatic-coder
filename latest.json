@@ -4,6 +4,14 @@
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUk9JOGliSEdHRUI3MHJPMnZmR0tzWU5telA4bVdiOVh2eXRlb3Q3enFSNTNmMmRYMlVvSTRmeEt2dm44aTZXSkNFbStldzk2UFBBUEhrbUJ4YzhLeWdNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc2MzI0MDY2CWZpbGU6SW50ZXJ2aWV3LUNvZGVyXzEuMC4xM194NjQtc2V0dXAuZXhlCnRiQjM5MWoyK1IxTTFyL3BJVWdwSGdFMkhpeHI5UFVRZVJDdmE2WkdyTnpxVEZ6ZWZIZkhjL2FWK0c5dGNZQUlEWDRjb1NQNjJoNzFraTNzU2dQVENBPT0K",
       "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.13/Interview-Coder_1.0.13_x64-setup.exe"
+    },
+    "darwin-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkhNcjlqWUFubkZlcS8yTkhtdFhpUlVyTUxWcldjZmZNQVFxM3JuTXNWTTNqdUdyb2loVzl5UlFreTE5TzZQVGtQU1dTVlNXSUFtZXBXdE14ZTJLUXdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc2MzI0NDM4CWZpbGU6SW50ZXJ2aWV3LUNvZGVyLmFwcC50YXIuZ3oKOGZHNU83Ni9yTThtQ3lWeHFKQ0w4OGFUaG15TTJhWm5zK0ZwR0RqMHJEeDNzTitYQmtPc1BWM0lPR2tiWmFaRU1aNHVTR3d3WEJQV01MS1hGZVNZQWc9PQo=",
+      "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.13/Interview-Coder.app.tar.gz"
+    },
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYnRDT3lDVDNBUkhNcjlqWUFubkZlcS8yTkhtdFhpUlVyTUxWcldjZmZNQVFxM3JuTXNWTTNqdUdyb2loVzl5UlFreTE5TzZQVGtQU1dTVlNXSUFtZXBXdE14ZTJLUXdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc2MzI0NDM4CWZpbGU6SW50ZXJ2aWV3LUNvZGVyLmFwcC50YXIuZ3oKOGZHNU83Ni9yTThtQ3lWeHFKQ0w4OGFUaG15TTJhWm5zK0ZwR0RqMHJEeDNzTitYQmtPc1BWM0lPR2tiWmFaRU1aNHVTR3d3WEJQV01MS1hGZVNZQWc9PQo=",
+      "url": "https://github.com/Super1Windcloud/automatic-coder/releases/download/1.0.13/Interview-Coder.app.tar.gz"
     }
   }
 }
