@@ -1,6 +1,6 @@
 [package]
 name = "interview-coder"
-version = "1.0.12"
+version = "1.0.13"
 description = "A Tauri App for interview coder"
 authors = ["Superwindcloud <<117893440@qq.com>>"]
 edition = "2024"
