@@ -1,16 +1,19 @@
 use std::fs;
 
-const EMBED_KEYS: [&str; 6] = [
+const EMBED_KEYS: [&str; 8] = [
     "ACTIVATION_MASTER_KEY",
     "ACTIVATION_REMOTE_TOKEN",
     "ACTIVATION_REMOTE_OWNER",
     "ACTIVATION_REMOTE_REPO",
     "ACTIVATION_REMOTE_TAG",
     "CAPTURE_SKIP_SAVE",
+    "LICENSE_PUBLIC_KEY",
+    "LICENSE_REVOCATION_URL",
 ];
 
 fn main() {
     println!("cargo:rerun-if-changed=.env");
+    println!("cargo:rerun-if-env-changed=INTERVIEW_CODER_HOST_BUILD");
     embed_env_from_dotenv(".env");
     tauri_build::build();
 }
@@ -29,7 +32,12 @@ fn embed_env_from_dotenv(path: &str) {
             continue;
         };
         let key = key.trim();
-        if !EMBED_KEYS.contains(&key) {
+        let embed_private_key = std::env::var("INTERVIEW_CODER_HOST_BUILD")
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let should_embed = EMBED_KEYS.contains(&key)
+            || (embed_private_key && key == "LICENSE_PRIVATE_KEY");
+        if !should_embed {
             continue;
         }
         let value = value.trim().trim_matches('"');
