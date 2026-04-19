@@ -677,11 +677,13 @@ fn persist_host_revocations(app_handle: &AppHandle, signed_payload: &str) -> Res
         serde_json::from_str::<serde_json::Value>(signed_payload).map_err(|err| err.to_string())?;
     let mut payloads = load_signed_revocation_payloads_from_path(&path)?;
     payloads.push(next_payload);
-    fs::write(
-        path,
-        serde_json::to_string_pretty(&payloads).map_err(|err| err.to_string())?,
-    )
-    .map_err(|err| err.to_string())
+    let serialized = serde_json::to_string_pretty(&payloads).map_err(|err| err.to_string())?;
+    fs::write(&path, &serialized).map_err(|err| err.to_string())?;
+    if let Ok(workspace_dir) = env::current_dir() {
+        let workspace_path = workspace_dir.join(REVOCATION_CACHE_FILE_NAME);
+        fs::write(workspace_path, &serialized).map_err(|err| err.to_string())?;
+    }
+    Ok(())
 }
 
 fn sync_issued_license_revocations(app_handle: &AppHandle, signed_payload: &str) -> Result<(), String> {

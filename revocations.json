@@ -1,8 +1,18 @@
-{
-  "payload": {
-    "version": 1,
-    "generated_at": 1776579650,
-    "revoked": ["lic_mac"]
+[
+  {
+    "payload": {
+      "generated_at": 1776581514,
+      "revoked": ["lic_20260419_144354"],
+      "version": 1
+    },
+    "signature": "1p2qTSru8dGfGOzOZIC6nua/+PruEdp8Zh1xr8sljj3uwb3LC7Oji4uIYr8dci/hgI02nSQRjWXEAer+s9x5Aw=="
   },
-  "signature": "R7DsHzZxTu+PiOyVDuOSx4WmvXm0SH2ddAIyGBQ3RK2K5tw8WjXG6O+A83QRkqXZVK/CjsnvHWPirOMTf5wfBg=="
-}
+  {
+    "payload": {
+      "generated_at": 1776582839,
+      "revoked": ["lic_mac"],
+      "version": 1
+    },
+    "signature": "/52j9n9tU+3O5Cve1MF2NLrQoHCd0+RFaalsilfpPdmufF2kNgL7sNOBXeeRpr9CeneR69g4CAE/PcOE8YKnDg=="
+  }
+]
