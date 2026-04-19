@@ -25,6 +25,8 @@ use crate::{
 const LICENSE_FILE_NAME: &str = "license.json";
 const REVOCATION_CACHE_FILE_NAME: &str = "revocations.json";
 const DEFAULT_REVOCATION_SYNC_INTERVAL_SECS: u64 = 900;
+const HOST_MACHINE_ID: &str =
+    "e387c89a24daa5544b9d4b795f8a28af5b23b5c080839e07558e7311aac14a11";
 
 pub struct LicenseState {
     inner: Mutex<Option<LicenseInner>>,
@@ -771,10 +773,7 @@ fn load_host_private_key() -> Result<String, String> {
 }
 
 fn host_machine_matches_current() -> bool {
-    let Some(expected_machine_id) = option_env!("HOST_MACHINE_ID") else {
-        return true;
-    };
-    let expected_machine_id = expected_machine_id.trim();
+    let expected_machine_id = HOST_MACHINE_ID.trim();
     if expected_machine_id.is_empty() {
         return true;
     }
