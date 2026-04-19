@@ -73,6 +73,9 @@
             font-weight: bold;
             text-align: center;
             resize: vertical;
+            white-space: pre;
+            overflow-x: auto;
+            overflow-y: auto;
             outline: none;
             transition: border-color 0.2s;
             app-region: no-drag;
@@ -213,6 +216,7 @@
                 placeholder="粘贴签名许可证"
                 autocomplete="off"
                 spellcheck="false"
+                wrap="off"
         ></textarea>
         <button class="submit" type="submit">立即激活</button>
         <div id="activation-status" class="status"></div>
