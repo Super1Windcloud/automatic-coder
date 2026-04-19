@@ -145,9 +145,15 @@ fn check_activation_status(app: &mut App<Wry>) {
             state.initialize(bootstrap, cache_dir, status.activated);
             start_revocation_monitor(app.handle());
             if needs_activation {
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.hide();
+                }
                 open_activation_window(app.handle());
             } else {
                 register_activation_shortcut(app.handle());
+                if preferences_require_onboarding() {
+                    open_language_selector(app.handle());
+                }
             }
         }
         Ok(None) => {

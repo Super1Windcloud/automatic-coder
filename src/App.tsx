@@ -66,6 +66,8 @@ const MainApp = ({
 
 function App() {
   const [hasSolution, setHasSolution] = useState(false);
+  const [isActivated, setIsActivated] = useState(false);
+  const [activationResolved, setActivationResolved] = useState(false);
 
   const hasRegistered = useRef(false); // 使用 useRef 来确保只注册一次
   const isActivatedRef = useRef(false);
@@ -112,13 +114,17 @@ function App() {
     const waitForActivationAndRegister = async () => {
       try {
         const activated = await invoke<boolean>("get_activation_status");
+        isActivatedRef.current = activated;
+        setIsActivated(activated);
+        setActivationResolved(true);
         if (activated) {
-          isActivatedRef.current = true;
           await registerShortcuts();
           return;
         }
         unlistenActivation = await listen("activation_granted", async () => {
           isActivatedRef.current = true;
+          setIsActivated(true);
+          setActivationResolved(true);
           await registerShortcuts();
           if (unlistenActivation) {
             unlistenActivation();
@@ -127,9 +133,12 @@ function App() {
         });
         unlistenActivationRevoked = await listen("activation_revoked", async () => {
           isActivatedRef.current = false;
+          setIsActivated(false);
+          setActivationResolved(true);
         });
       } catch (err) {
         logger.error("activation bootstrap err", err);
+        setActivationResolved(true);
       }
     };
 
@@ -213,6 +222,10 @@ function App() {
       });
     };
   }, []);
+
+  if (!activationResolved || !isActivated) {
+    return null;
+  }
 
   return <MainApp hasSolution={hasSolution} setHasSolution={setHasSolution} />;
 }

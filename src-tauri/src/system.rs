@@ -2,6 +2,7 @@ use crate::config::{
     open_custom_openai_selector, open_language_selector, persist_background_broadcast,
     persist_custom_openai_enabled, persist_page_opacity, toggle_vlm_model,
 };
+use crate::license::LicenseState;
 use crate::license::{host_management_available, open_host_management_window};
 use crate::lan::current_lan_urls;
 use crate::utils::{is_dev, toggle_webview_devtools};
@@ -89,7 +90,13 @@ pub fn create_shortcut(app: &mut App<Wry>) {
                             ShortcutState::Pressed => {
                                 app_debug!("system", "shortcut pressed: {:?}", shortcut);
                             }
-                            ShortcutState::Released => open_language_selector(_app),
+                            ShortcutState::Released => {
+                                let state: tauri::State<LicenseState> = _app.state();
+                                if state.is_enabled() && !state.is_activated() {
+                                    return;
+                                }
+                                open_language_selector(_app)
+                            }
                         }
                     } else if shortcut == &quit_shortcut {
                         match event.state() {
@@ -466,6 +473,10 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                 graceful_exit(app);
             }
             "code_language" => {
+                let state: tauri::State<LicenseState> = app.state();
+                if state.is_enabled() && !state.is_activated() {
+                    return;
+                }
                 open_language_selector(app);
             }
             "toggle_model" => {
@@ -568,6 +579,10 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             } = event
             {
                 let app = tray.app_handle();
+                let state: tauri::State<LicenseState> = app.state();
+                if state.is_enabled() && !state.is_activated() {
+                    return;
+                }
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.unminimize();
                     let _ = window.show();

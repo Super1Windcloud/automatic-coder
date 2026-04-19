@@ -16,8 +16,10 @@ use tauri::{
 use tokio::time::sleep;
 
 use crate::{
-    app_debug, app_error, app_warn, config::open_language_selector,
-    system::register_activation_shortcut, utils::is_dev,
+    app_debug, app_error, app_warn,
+    config::{open_language_selector, preferences_require_onboarding},
+    system::register_activation_shortcut,
+    utils::is_dev,
 };
 
 const LICENSE_FILE_NAME: &str = "license.json";
@@ -267,7 +269,9 @@ pub async fn submit_activation_code(
     if let Some(main) = app.get_webview_window("main") {
         reveal_main_window(main);
     }
-    open_language_selector(&app);
+    if preferences_require_onboarding() {
+        open_language_selector(&app);
+    }
     let _ = app.emit("activation_granted", true);
     Ok(ActivationAttemptPayload {
         success: true,

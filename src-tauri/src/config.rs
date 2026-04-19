@@ -146,7 +146,6 @@ pub enum DirectionEnum {
 
 pub fn load_preferences(app: &mut App) {
     let result = load_config("interview-coder-config", "preferences");
-    // 修改键值
     if let Ok(config) = result {
         let preferences: PreferencesConfig = config;
         let state: State<AppState> = app.state();
@@ -175,14 +174,22 @@ pub fn load_preferences(app: &mut App) {
             let mut background_broadcast_guard = state.background_broadcast.lock().unwrap();
             *background_broadcast_guard = preferences.background_broadcast;
         }
-        if preferences.prompt.is_empty() {
-            open_language_selector(app.handle())
-        } else {
+        if !preferences.prompt.is_empty() {
             *state.prompt.lock().unwrap() = preferences.prompt;
         }
     } else {
         app_warn!("config", "failed to load preferences");
-        open_language_selector(app.handle())
+    }
+}
+
+pub fn preferences_require_onboarding() -> bool {
+    let result = load_config("interview-coder-config", "preferences");
+    match result {
+        Ok(config) => {
+            let preferences: PreferencesConfig = config;
+            preferences.prompt.trim().is_empty()
+        }
+        Err(_) => true,
     }
 }
 
