@@ -114,6 +114,92 @@
         color: #f1d0a0;
       }
 
+      .label-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+
+      .label-row label {
+        margin-bottom: 0;
+      }
+
+      .icon-button {
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        padding: 0;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #f2ede5;
+      }
+
+      .icon-button:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .icon-button svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .license-preview {
+        display: none;
+        margin: -4px 0 14px;
+        padding: 12px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .license-preview.open {
+        display: block;
+      }
+
+      .license-preview-title {
+        margin-bottom: 10px;
+        font-size: 12px;
+        color: #c8b39b;
+      }
+
+      .license-preview-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .license-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(247, 214, 139, 0.2);
+        background: rgba(247, 214, 139, 0.08);
+        color: #f7e8cf;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .license-chip:hover {
+        background: rgba(247, 214, 139, 0.16);
+      }
+
+      .license-chip small {
+        color: #c8b39b;
+      }
+
+      .license-preview-empty {
+        font-size: 13px;
+        color: #c8b39b;
+      }
+
       label {
         display: block;
         margin-bottom: 8px;
@@ -221,7 +307,19 @@
           <label for="revocation-version-input">版本号</label>
           <input id="revocation-version-input" type="number" min="1" value="1" />
 
-          <label for="revoked-ids-input">吊销的许可证 ID（每行一个）</label>
+          <div class="label-row">
+            <label for="revoked-ids-input">吊销的许可证 ID（每行一个）</label>
+            <button id="preview-issued-license-ids" class="icon-button ghost" type="button" aria-label="预览已保存的许可证 ID" title="预览已保存的许可证 ID">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M2.25 12S5.25 6.75 12 6.75 21.75 12 21.75 12 18.75 17.25 12 17.25 2.25 12 2.25 12Z" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M12 14.25A2.25 2.25 0 1 0 12 9.75a2.25 2.25 0 0 0 0 4.5Z" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+            </button>
+          </div>
+          <div id="license-preview" class="license-preview">
+            <div class="license-preview-title">点击任意许可证 ID 可追加到吊销列表</div>
+            <div id="license-preview-list" class="license-preview-list"></div>
+          </div>
           <textarea id="revoked-ids-input" placeholder="例如&#10;lic_20260419_001&#10;lic_20260419_002"></textarea>
 
           <div class="button-row">

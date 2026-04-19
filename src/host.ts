@@ -19,10 +19,20 @@ const issueStatus = document.getElementById('issue-status') as HTMLDivElement | 
 
 const revocationVersionInput = document.getElementById('revocation-version-input') as HTMLInputElement | null
 const revokedIdsInput = document.getElementById('revoked-ids-input') as HTMLTextAreaElement | null
+const previewIssuedLicenseIdsButton = document.getElementById('preview-issued-license-ids') as HTMLButtonElement | null
+const licensePreview = document.getElementById('license-preview') as HTMLDivElement | null
+const licensePreviewList = document.getElementById('license-preview-list') as HTMLDivElement | null
 const signRevocationButton = document.getElementById('sign-revocation-button')
 const revocationCopyButton = document.getElementById('revocation-copy-button')
 const signedRevocationsOutput = document.getElementById('signed-revocations-output') as HTMLTextAreaElement | null
 const revocationStatus = document.getElementById('revocation-status') as HTMLDivElement | null
+
+type IssuedLicensePreview = {
+  issued_at: number
+  license_id: string
+  machine_id: string
+  customer: string | null
+}
 
 function setStatus(target: HTMLDivElement | null, message: string, isError = false) {
   if (!target) {
@@ -38,6 +48,68 @@ function defaultLicenseId() {
   const date = `${now.getFullYear()}${`${now.getMonth() + 1}`.padStart(2, '0')}${`${now.getDate()}`.padStart(2, '0')}`
   const time = `${`${now.getHours()}`.padStart(2, '0')}${`${now.getMinutes()}`.padStart(2, '0')}${`${now.getSeconds()}`.padStart(2, '0')}`
   return `lic_${date}_${time}`
+}
+
+function appendRevokedLicenseId(licenseId: string) {
+  if (!revokedIdsInput) {
+    return
+  }
+  const existing = revokedIdsInput.value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (existing.includes(licenseId)) {
+    setStatus(revocationStatus, `许可证 ${licenseId} 已在吊销列表中。`)
+    return
+  }
+  revokedIdsInput.value = [...existing, licenseId].join('\n')
+  setStatus(revocationStatus, `已追加许可证 ${licenseId}。`)
+}
+
+function renderIssuedLicensePreview(items: IssuedLicensePreview[]) {
+  if (!licensePreview || !licensePreviewList) {
+    return
+  }
+
+  licensePreviewList.innerHTML = ''
+  if (!items.length) {
+    const empty = document.createElement('div')
+    empty.className = 'license-preview-empty'
+    empty.textContent = '本地还没有已保存的许可证记录。'
+    licensePreviewList.append(empty)
+    return
+  }
+
+  for (const item of items) {
+    const chip = document.createElement('button')
+    chip.type = 'button'
+    chip.className = 'license-chip'
+    chip.title = item.machine_id
+    chip.innerHTML = `<span>${item.license_id}</span><small>${item.customer || '无客户标识'}</small>`
+    chip.addEventListener('click', () => appendRevokedLicenseId(item.license_id))
+    licensePreviewList.append(chip)
+  }
+}
+
+async function toggleIssuedLicensePreview() {
+  if (!licensePreview) {
+    return
+  }
+
+  if (licensePreview.classList.contains('open')) {
+    licensePreview.classList.remove('open')
+    return
+  }
+
+  try {
+    const items = await invoke<IssuedLicensePreview[]>('host_list_issued_licenses')
+    renderIssuedLicensePreview(items)
+    licensePreview.classList.add('open')
+    setStatus(revocationStatus, items.length ? '已加载本地许可证 ID。' : '没有可预览的许可证记录。')
+  } catch (err) {
+    logger.error('load issued licenses failed', err)
+    setStatus(revocationStatus, '读取本地许可证记录失败。', true)
+  }
 }
 
 async function copyText(value: string, successTarget: HTMLDivElement | null) {
@@ -119,6 +191,10 @@ signRevocationButton?.addEventListener('click', async () => {
 
 revocationCopyButton?.addEventListener('click', async () => {
   await copyText(signedRevocationsOutput?.value || '', revocationStatus)
+})
+
+previewIssuedLicenseIdsButton?.addEventListener('click', async () => {
+  await toggleIssuedLicensePreview()
 })
 
 async function loadContext() {

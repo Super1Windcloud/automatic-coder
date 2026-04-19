@@ -73,6 +73,14 @@ pub struct HostManagementContextPayload {
     pub revocation_url: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct IssuedLicensePreviewPayload {
+    pub issued_at: u64,
+    pub license_id: String,
+    pub machine_id: String,
+    pub customer: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct LicenseBootstrap {
     pub public_key: String,
@@ -103,7 +111,7 @@ struct IssuedLicenseRecord {
     machine_id: String,
     customer: Option<String>,
     expires_at: Option<u64>,
-    signed_license: String,
+    signed_license: serde_json::Value,
 }
 
 #[derive(Debug)]
@@ -400,6 +408,8 @@ pub fn host_issue_license(
     );
     let signed_license =
         license_manager::sign_license(&private_key, claims).map_err(|err| err.to_string())?;
+    let signed_license_json =
+        serde_json::from_str::<serde_json::Value>(&signed_license).map_err(|err| err.to_string())?;
     persist_issued_license_record(
         &app_handle,
         IssuedLicenseRecord {
@@ -408,7 +418,7 @@ pub fn host_issue_license(
             machine_id,
             customer: normalized_customer,
             expires_at,
-            signed_license: signed_license.clone(),
+            signed_license: signed_license_json,
         },
     )?;
     Ok(signed_license)
@@ -424,6 +434,24 @@ pub fn host_sign_revocations(version: u64, revoked: Vec<String>) -> Result<Strin
         .collect::<Vec<_>>();
     let payload = license_manager::new_revocation_list(revoked, version);
     license_manager::sign_revocation_list(&private_key, payload).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub fn host_list_issued_licenses(
+    app_handle: AppHandle,
+) -> Result<Vec<IssuedLicensePreviewPayload>, String> {
+    load_host_private_key()?;
+    let records = load_issued_license_records(&app_handle)?;
+    Ok(records
+        .into_iter()
+        .rev()
+        .map(|record| IssuedLicensePreviewPayload {
+            issued_at: record.issued_at,
+            license_id: record.license_id,
+            machine_id: record.machine_id,
+            customer: record.customer,
+        })
+        .collect())
 }
 
 fn hydrate_activation_env() {
@@ -618,23 +646,25 @@ fn persist_issued_license_record(
     fs::create_dir_all(&host_dir).map_err(|err| err.to_string())?;
 
     let path = host_dir.join(HOST_ISSUED_LICENSES_FILE_NAME);
-    let mut records = if path.exists() {
-        let raw = fs::read_to_string(&path).map_err(|err| err.to_string())?;
-        if raw.trim().is_empty() {
-            Vec::new()
-        } else {
-            serde_json::from_str::<Vec<IssuedLicenseRecord>>(&raw).map_err(|err| err.to_string())?
-        }
-    } else {
-        Vec::new()
-    };
-
+    let mut records = load_issued_license_records(app_handle)?;
     records.push(record);
     fs::write(
         path,
         serde_json::to_string_pretty(&records).map_err(|err| err.to_string())?,
     )
     .map_err(|err| err.to_string())
+}
+
+fn load_issued_license_records(app_handle: &AppHandle) -> Result<Vec<IssuedLicenseRecord>, String> {
+    let path = resolve_host_management_dir(app_handle)?.join(HOST_ISSUED_LICENSES_FILE_NAME);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let raw = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_str::<Vec<IssuedLicenseRecord>>(&raw).map_err(|err| err.to_string())
 }
 
 fn load_valid_license_claims_from_dir(
