@@ -283,11 +283,10 @@ pub async fn submit_activation_code(
         }
         Ok(false) => {}
         Err(_) => {
-            return Ok(ActivationAttemptPayload {
-                success: false,
-                status: "revocation_unavailable".into(),
-                activated: false,
-            });
+            app_warn!(
+                "license",
+                "revocation check unavailable during activation; allowing local license to proceed"
+            );
         }
     }
 
@@ -679,7 +678,12 @@ pub async fn refresh_runtime_license(app_handle: &AppHandle) -> Result<(), Strin
     match resolve_revocation_status(&context, &claims.license_id).await {
         Ok(true) => invalidate_runtime_license(app_handle, "revoked"),
         Ok(false) => {}
-        Err(_) => invalidate_runtime_license(app_handle, "revocation_unavailable"),
+        Err(err) => {
+            app_warn!(
+                "license",
+                "revocation verification unavailable; keeping current license active: {err}"
+            );
+        }
     }
 
     Ok(())
@@ -872,7 +876,17 @@ async fn resolve_revocation_status(
 
     fetch_remote_revocations(context)
         .await
-        .map(|revoked| revoked.iter().any(|item| item == license_id))
+        .map(|revoked| {
+            let matched = revoked.iter().any(|item| item == license_id);
+            app_debug!(
+                "license",
+                "revocation resolved for license_id={}, revoked_count={}, matched={}",
+                license_id,
+                revoked.len(),
+                matched
+            );
+            matched
+        })
         .map_err(|err| {
             app_warn!("license", "failed to fetch remote revocations: {err}");
             LicenseValidationError::RevocationUnavailable
@@ -908,10 +922,69 @@ fn extract_revoked_ids_from_signed_payloads(
     };
 
     let mut revoked = Vec::new();
-    for entry in entries {
+    app_debug!(
+        "license",
+        "verifying remote revocations payload entries={}",
+        entries.len()
+    );
+    for (index, entry) in entries.into_iter().enumerate() {
+        let version = entry
+            .get("payload")
+            .and_then(|payload| payload.get("version"))
+            .and_then(|value| value.as_u64())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unknown".into());
+        let generated_at = entry
+            .get("payload")
+            .and_then(|payload| payload.get("generated_at"))
+            .and_then(|value| value.as_u64())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "unknown".into());
+        let revoked_count = entry
+            .get("payload")
+            .and_then(|payload| payload.get("revoked"))
+            .and_then(|value| value.as_array())
+            .map(|items| items.len())
+            .unwrap_or(0);
+        let signature_preview = entry
+            .get("signature")
+            .and_then(|value| value.as_str())
+            .map(|value| value.chars().take(16).collect::<String>())
+            .unwrap_or_else(|| "missing".into());
         let signed = serde_json::to_string(&entry).map_err(|err| err.to_string())?;
-        let payload =
-            verify_signed_revocation_list(public_key, &signed).map_err(|err| err.to_string())?;
+        app_debug!(
+            "license",
+            "verifying revocation entry index={}, version={}, generated_at={}, revoked_count={}, signature_prefix={}",
+            index,
+            version,
+            generated_at,
+            revoked_count,
+            signature_preview
+        );
+        let payload = match verify_signed_revocation_list(public_key, &signed) {
+            Ok(payload) => {
+                app_debug!(
+                    "license",
+                    "revocation entry verified index={}, version={}, revoked_count={}",
+                    index,
+                    payload.version,
+                    payload.revoked.len()
+                );
+                payload
+            }
+            Err(err) => {
+                app_warn!(
+                    "license",
+                    "revocation entry verify failed index={}, version={}, generated_at={}, signature_prefix={}, error={}",
+                    index,
+                    version,
+                    generated_at,
+                    signature_preview,
+                    err
+                );
+                return Err(err.to_string());
+            }
+        };
         revoked.extend(payload.revoked);
     }
     Ok(revoked)
