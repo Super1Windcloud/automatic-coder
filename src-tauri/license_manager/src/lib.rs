@@ -3,15 +3,18 @@ use std::convert::TryInto;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Nonce,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_ENGINE, Engine as _};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::distr::Alphanumeric;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 const NONCE_LEN: usize = 12;
@@ -30,6 +33,10 @@ pub enum LicenseError {
     Io(String),
     #[error("serialization error: {0}")]
     Serde(String),
+    #[error("invalid signature")]
+    InvalidSignature,
+    #[error("invalid license payload: {0}")]
+    InvalidPayload(String),
 }
 
 impl From<std::io::Error> for LicenseError {
@@ -92,6 +99,38 @@ pub enum VerificationResult {
     Success,
     AlreadyUsed,
     NotFound,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LicenseClaims {
+    pub license_id: String,
+    pub machine_id: String,
+    pub customer: Option<String>,
+    pub issued_at: u64,
+    pub expires_at: Option<u64>,
+    #[serde(default)]
+    pub features: Vec<String>,
+    pub version: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedLicense {
+    pub payload: LicenseClaims,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevocationList {
+    pub version: u64,
+    pub generated_at: u64,
+    #[serde(default)]
+    pub revoked: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedRevocationList {
+    pub payload: RevocationList,
+    pub signature: String,
 }
 
 impl LicenseManager {
@@ -259,6 +298,154 @@ pub fn bootstrap_activation_storage<P: AsRef<Path>>(
         encrypted_store_path,
         encrypted_codes_path: client_codes_path,
     })
+}
+
+pub fn generate_signing_keypair() -> (String, String) {
+    let seed = random_32_bytes();
+    let signing_key = SigningKey::from_bytes(&seed);
+    let verifying_key = signing_key.verifying_key();
+    (
+        BASE64_ENGINE.encode(signing_key.to_bytes()),
+        BASE64_ENGINE.encode(verifying_key.to_bytes()),
+    )
+}
+
+pub fn create_machine_id(raw_machine_signature: &str) -> String {
+    let digest = Sha256::digest(raw_machine_signature.as_bytes());
+    hex::encode(digest)
+}
+
+pub fn sign_license(private_key: &str, claims: LicenseClaims) -> Result<String, LicenseError> {
+    validate_claims(&claims)?;
+    let signing_key = signing_key_from_str(private_key)?;
+    let signature = sign_payload(&signing_key, &claims)?;
+    let signed = SignedLicense {
+        payload: claims,
+        signature,
+    };
+    Ok(serde_json::to_string_pretty(&signed)?)
+}
+
+pub fn verify_signed_license(public_key: &str, signed: &str) -> Result<LicenseClaims, LicenseError> {
+    let verifying_key = verifying_key_from_str(public_key)?;
+    let parsed: SignedLicense = serde_json::from_str(signed)?;
+    validate_claims(&parsed.payload)?;
+    verify_payload(&verifying_key, &parsed.payload, &parsed.signature)?;
+    Ok(parsed.payload)
+}
+
+pub fn sign_revocation_list(
+    private_key: &str,
+    revocations: RevocationList,
+) -> Result<String, LicenseError> {
+    let signing_key = signing_key_from_str(private_key)?;
+    let signature = sign_payload(&signing_key, &revocations)?;
+    let signed = SignedRevocationList {
+        payload: revocations,
+        signature,
+    };
+    Ok(serde_json::to_string_pretty(&signed)?)
+}
+
+pub fn verify_signed_revocation_list(
+    public_key: &str,
+    signed: &str,
+) -> Result<RevocationList, LicenseError> {
+    let verifying_key = verifying_key_from_str(public_key)?;
+    let parsed: SignedRevocationList = serde_json::from_str(signed)?;
+    verify_payload(&verifying_key, &parsed.payload, &parsed.signature)?;
+    Ok(parsed.payload)
+}
+
+pub fn new_license_claims(
+    license_id: String,
+    machine_id: String,
+    customer: Option<String>,
+    expires_at: Option<u64>,
+    features: Vec<String>,
+) -> LicenseClaims {
+    LicenseClaims {
+        license_id,
+        machine_id,
+        customer,
+        issued_at: now_unix_seconds(),
+        expires_at,
+        features,
+        version: 1,
+    }
+}
+
+pub fn new_revocation_list(revoked: Vec<String>, version: u64) -> RevocationList {
+    RevocationList {
+        version,
+        generated_at: now_unix_seconds(),
+        revoked,
+    }
+}
+
+pub fn now_unix_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn sign_payload<T: Serialize>(signing_key: &SigningKey, payload: &T) -> Result<String, LicenseError> {
+    let bytes = serde_json::to_vec(payload)?;
+    let signature = signing_key.sign(&bytes);
+    Ok(BASE64_ENGINE.encode(signature.to_bytes()))
+}
+
+fn verify_payload<T: Serialize>(
+    verifying_key: &VerifyingKey,
+    payload: &T,
+    signature: &str,
+) -> Result<(), LicenseError> {
+    let bytes = serde_json::to_vec(payload)?;
+    let signature_bytes = BASE64_ENGINE
+        .decode(signature.as_bytes())
+        .map_err(|err| LicenseError::KeyDecode(err.to_string()))?;
+    let signature_array: [u8; 64] = signature_bytes
+        .try_into()
+        .map_err(|_| LicenseError::InvalidSignature)?;
+    let signature = Signature::from_bytes(&signature_array);
+    verifying_key
+        .verify(&bytes, &signature)
+        .map_err(|_| LicenseError::InvalidSignature)
+}
+
+fn validate_claims(claims: &LicenseClaims) -> Result<(), LicenseError> {
+    if claims.license_id.trim().is_empty() {
+        return Err(LicenseError::InvalidPayload("license_id is required".into()));
+    }
+    if claims.machine_id.trim().is_empty() {
+        return Err(LicenseError::InvalidPayload("machine_id is required".into()));
+    }
+    if let Some(expires_at) = claims.expires_at {
+        if expires_at < claims.issued_at {
+            return Err(LicenseError::InvalidPayload(
+                "expires_at must be greater than issued_at".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn signing_key_from_str(input: &str) -> Result<SigningKey, LicenseError> {
+    let key_bytes = decode_key_material(input)?;
+    Ok(SigningKey::from_bytes(&key_bytes))
+}
+
+fn verifying_key_from_str(input: &str) -> Result<VerifyingKey, LicenseError> {
+    let key_bytes = decode_key_material(input)?;
+    VerifyingKey::from_bytes(&key_bytes).map_err(|_| LicenseError::InvalidKeyLength)
+}
+
+fn random_32_bytes() -> [u8; 32] {
+    let mut rng = rand::rng();
+    let mut bytes = [0u8; 32];
+    rng.fill(&mut bytes);
+    bytes
 }
 
 fn decode_key_material(input: &str) -> Result<[u8; 32], LicenseError> {

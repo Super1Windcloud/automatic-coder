@@ -1,7 +1,7 @@
 #![allow(clippy::let_and_return)]
 
-use std::sync::Mutex;
 use reqwest::Url;
+use std::sync::Mutex;
 use tauri::{App, AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::utils::is_dev;
@@ -165,8 +165,7 @@ pub fn load_preferences(app: &mut App) {
         }
         {
             let mut base_url_guard = state.custom_openai_base_url.lock().unwrap();
-            *base_url_guard =
-                sanitize_openai_compat_base_url(&preferences.custom_openai_base_url);
+            *base_url_guard = sanitize_openai_compat_base_url(&preferences.custom_openai_base_url);
         }
         {
             let mut model_guard = state.custom_openai_model.lock().unwrap();
@@ -305,7 +304,10 @@ pub fn toggle_vlm_model(app_handle: &AppHandle) -> Result<String, String> {
     Ok(target)
 }
 
-pub fn persist_custom_openai_enabled(app_handle: &AppHandle, enabled: bool) -> Result<bool, String> {
+pub fn persist_custom_openai_enabled(
+    app_handle: &AppHandle,
+    enabled: bool,
+) -> Result<bool, String> {
     let state: State<AppState> = app_handle.state();
     *state
         .custom_openai_enabled

@@ -1,35 +1,33 @@
 use dirs::home_dir;
 use dotenv::{dotenv, from_filename};
-use license_manager::{ActivationRepository, LicenseError, VerificationResult};
+use license_manager::{create_machine_id, verify_signed_license, verify_signed_revocation_list};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fmt::{self, Write};
-use std::io::Write as IoWrite;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 use tauri::{
     AppHandle, Emitter, Manager, Position, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
-use tempfile::NamedTempFile;
+use tokio::time::sleep;
 
 use crate::{
-    app_debug, app_info, app_warn, config::open_language_selector,
+    app_debug, app_error, app_warn, config::open_language_selector,
     system::register_activation_shortcut, utils::is_dev,
 };
-const REMOTE_ACTIVATION_FILE: &str = "activation_codes.enc";
-const DEFAULT_ACTIVATION_REMOTE_URL: &str = "https://raw.githubusercontent.com/Super1Windcloud/automatic-coder/refs/heads/master/src-tauri/enc/activation_codes.enc";
-const ACTIVATION_STATUS_FILE: [&str; 2] = [
-    "activation_status_fingerprint",
-    "cd0621ec3d0ffce82ce0a435ebf5bf25caae51fa4c0d7ba055869b59a93b6585",
-];
+
+const LICENSE_FILE_NAME: &str = "license.json";
+const REVOCATION_CACHE_FILE_NAME: &str = "revocations.json";
+const DEFAULT_REVOCATION_SYNC_INTERVAL_SECS: u64 = 900;
 
 pub struct LicenseState {
     inner: Mutex<Option<LicenseInner>>,
     enabled: AtomicBool,
+    pub(crate) monitor_started: AtomicBool,
 }
 
 impl Default for LicenseState {
@@ -37,15 +35,18 @@ impl Default for LicenseState {
         Self {
             inner: Mutex::new(None),
             enabled: AtomicBool::new(false),
+            monitor_started: AtomicBool::new(false),
         }
     }
 }
 
 struct LicenseInner {
-    activation_key: String,
-    remote: RemoteActivationConfig,
-    status_roots: Vec<PathBuf>,
+    public_key: String,
+    revocation_url: String,
+    cache_dir: PathBuf,
     activated: bool,
+    offline_grace_seconds: u64,
+    sync_interval_seconds: u64,
     client: Client,
 }
 
@@ -54,24 +55,72 @@ pub struct ActivationStatus {
     pub activated: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ActivationAttemptPayload {
+    pub success: bool,
+    pub status: String,
+    pub activated: bool,
+}
+
+#[derive(Clone)]
+pub struct LicenseBootstrap {
+    pub public_key: String,
+    pub revocation_url: String,
+    pub offline_grace_seconds: u64,
+    pub sync_interval_seconds: u64,
+}
+
+#[derive(Clone)]
+struct LicenseRuntimeContext {
+    public_key: String,
+    revocation_url: String,
+    cache_dir: PathBuf,
+    offline_grace_seconds: u64,
+    client: Client,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct RevocationCache {
+    fetched_at: u64,
+    signed_payload: String,
+}
+
+#[derive(Debug)]
+enum LicenseValidationError {
+    InvalidFormat,
+    InvalidSignature,
+    MachineMismatch,
+    Expired,
+    RevocationUnavailable,
+}
+
+impl fmt::Display for LicenseValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LicenseValidationError::InvalidFormat => write!(f, "invalid_format"),
+            LicenseValidationError::InvalidSignature => write!(f, "invalid_signature"),
+            LicenseValidationError::MachineMismatch => write!(f, "machine_mismatch"),
+            LicenseValidationError::Expired => write!(f, "expired"),
+            LicenseValidationError::RevocationUnavailable => write!(f, "revocation_unavailable"),
+        }
+    }
+}
+
 impl LicenseState {
-    pub fn initialize(
-        &self,
-        bootstrap: ActivationBootstrap,
-        status_roots: Vec<PathBuf>,
-        activated: bool,
-    ) {
+    pub fn initialize(&self, bootstrap: LicenseBootstrap, cache_dir: PathBuf, activated: bool) {
         let mut guard = self.inner.lock().unwrap();
         let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .user_agent("InterviewCoder/activation-refresh")
+            .timeout(Duration::from_secs(15))
+            .user_agent("InterviewCoder/license-runtime")
             .build()
-            .expect("failed to construct activation HTTP client");
+            .expect("failed to construct license HTTP client");
         *guard = Some(LicenseInner {
-            activation_key: bootstrap.activation_key,
-            remote: bootstrap.remote,
-            status_roots,
+            public_key: bootstrap.public_key,
+            revocation_url: bootstrap.revocation_url,
+            cache_dir,
             activated,
+            offline_grace_seconds: bootstrap.offline_grace_seconds,
+            sync_interval_seconds: bootstrap.sync_interval_seconds,
             client,
         });
         self.enabled.store(true, Ordering::SeqCst);
@@ -90,71 +139,42 @@ impl LicenseState {
         self.enabled.load(Ordering::SeqCst)
     }
 
-    pub fn is_activated(&self) -> Result<bool, LicenseError> {
-        let guard = self.inner.lock().unwrap();
-        let Some(inner) = guard.as_ref() else {
-            return Ok(false);
-        };
-        Ok(inner.activated)
+    pub fn is_activated(&self) -> bool {
+        self.inner
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|inner| inner.activated)
+            .unwrap_or(false)
     }
 
-    pub async fn verify_and_consume(
-        &self,
-        encrypted_code: &str,
-    ) -> Result<VerificationResult, ActivationFlowError> {
-        let (status_roots, activation_key, remote, client) = {
-            let mut guard = self.inner.lock().unwrap();
-            let Some(inner) = guard.as_mut() else {
-                return Err(ActivationFlowError::Disabled(
-                    "license system has not been initialised".into(),
-                ));
-            };
-            if inner.activated {
-                return Ok(VerificationResult::Success);
-            }
-            (
-                inner.status_roots.clone(),
-                inner.activation_key.clone(),
-                inner.remote.clone(),
-                inner.client.clone(),
-            )
-        };
-
-        let locker = RemoteActivationLock::acquire(remote, client).await?;
-        let repository = ActivationRepository::new(locker.path(), &activation_key)?;
-        let verification = repository.verify_and_consume(encrypted_code)?;
-
-        if matches!(verification, VerificationResult::Success) {
-            locker.finalize_success().await?;
-            persist_status(&status_roots, encrypted_code)?;
-            if let Some(inner) = self.inner.lock().unwrap().as_mut() {
-                inner.activated = true;
-            }
+    pub fn set_activated(&self, activated: bool) {
+        if let Some(inner) = self.inner.lock().unwrap().as_mut() {
+            inner.activated = activated;
         }
-
-        Ok(verification)
     }
-}
 
-#[derive(Debug, Serialize)]
-pub struct ActivationAttemptPayload {
-    pub success: bool,
-    pub status: String,
-    pub activated: bool,
-}
-#[derive(Clone)]
-pub struct ActivationBootstrap {
-    pub activation_key: String,
-    pub remote: RemoteActivationConfig,
-}
+    fn context(&self) -> Option<LicenseRuntimeContext> {
+        self.inner
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|inner| LicenseRuntimeContext {
+                public_key: inner.public_key.clone(),
+                revocation_url: inner.revocation_url.clone(),
+                cache_dir: inner.cache_dir.clone(),
+                offline_grace_seconds: inner.offline_grace_seconds,
+                client: inner.client.clone(),
+            })
+    }
 
-#[derive(Clone)]
-pub struct RemoteActivationConfig {
-    pub owner: String,
-    pub repo: String,
-    pub tag: String,
-    pub token: String,
-    pub raw_url: String,
+    fn sync_interval_seconds(&self) -> Option<u64> {
+        self.inner
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|inner| inner.sync_interval_seconds)
+    }
 }
 
 #[tauri::command]
@@ -165,7 +185,12 @@ pub fn get_activation_status(state: State<LicenseState>) -> Result<bool, String>
     if !state.is_ready() {
         return Ok(false);
     }
-    state.is_activated().map_err(|err| err.to_string())
+    Ok(state.is_activated())
+}
+
+#[tauri::command]
+pub fn get_machine_id() -> Result<String, String> {
+    Ok(compute_machine_id())
 }
 
 #[tauri::command]
@@ -174,7 +199,8 @@ pub async fn submit_activation_code(
     state: State<'_, LicenseState>,
     encrypted_code: String,
 ) -> Result<ActivationAttemptPayload, String> {
-    if encrypted_code.trim().is_empty() {
+    let license = encrypted_code.trim();
+    if license.is_empty() {
         return Ok(ActivationAttemptPayload {
             success: false,
             status: "empty_code".into(),
@@ -188,111 +214,104 @@ pub async fn submit_activation_code(
             activated: true,
         });
     }
-    if !state.is_ready() {
+    let Some(context) = state.context() else {
         return Ok(ActivationAttemptPayload {
             success: false,
             status: "pending_initialisation".into(),
             activated: false,
         });
+    };
+
+    let claims = match validate_signed_license(license, &context.public_key) {
+        Ok(claims) => claims,
+        Err(err) => {
+            return Ok(ActivationAttemptPayload {
+                success: false,
+                status: err.to_string(),
+                activated: false,
+            });
+        }
+    };
+
+    match resolve_revocation_status(&context, &claims.license_id).await {
+        Ok(true) => {
+            return Ok(ActivationAttemptPayload {
+                success: false,
+                status: "revoked".into(),
+                activated: false,
+            });
+        }
+        Ok(false) => {}
+        Err(_) => {
+            return Ok(ActivationAttemptPayload {
+                success: false,
+                status: "revocation_unavailable".into(),
+                activated: false,
+            });
+        }
     }
 
-    match state.verify_and_consume(encrypted_code.trim()).await {
-        Ok(VerificationResult::Success) => {
-            register_activation_shortcut(&app);
-            if let Some(window) = app.get_webview_window("activation_gate") {
-                let _ = window.hide();
-                let _ = window.close();
-            }
-            if let Some(main) = app.get_webview_window("main") {
-                reveal_main_window(main);
-            }
-            open_language_selector(&app);
-            let _ = app.emit("activation_granted", true);
-            Ok(ActivationAttemptPayload {
-                success: true,
-                status: "success".into(),
-                activated: true,
-            })
-        }
-        Ok(VerificationResult::AlreadyUsed) => Ok(ActivationAttemptPayload {
-            success: false,
-            status: "already_used".into(),
-            activated: false,
-        }),
-        Ok(VerificationResult::NotFound) => Ok(ActivationAttemptPayload {
-            success: false,
-            status: "not_found".into(),
-            activated: false,
-        }),
-        Err(err) => Err(err.to_string()),
+    persist_license(&context, license)?;
+    state.set_activated(true);
+    register_activation_shortcut(&app);
+    if let Some(window) = app.get_webview_window("activation_gate") {
+        let _ = window.hide();
+        let _ = window.close();
     }
+    if let Some(main) = app.get_webview_window("main") {
+        reveal_main_window(main);
+    }
+    open_language_selector(&app);
+    let _ = app.emit("activation_granted", true);
+    Ok(ActivationAttemptPayload {
+        success: true,
+        status: "success".into(),
+        activated: true,
+    })
 }
 
-pub fn prepare_activation_repository(
-    app_handle: &AppHandle,
-) -> Result<Option<ActivationBootstrap>, LicenseError> {
+pub fn prepare_license_runtime(app_handle: &AppHandle) -> Result<Option<LicenseBootstrap>, String> {
     hydrate_activation_env();
-    let Some(key) = env::var("ACTIVATION_MASTER_KEY")
+    let Some(public_key) = env::var("LICENSE_PUBLIC_KEY")
         .ok()
-        .or_else(|| option_env!("ACTIVATION_MASTER_KEY").map(|value| value.to_string()))
+        .or_else(|| option_env!("LICENSE_PUBLIC_KEY").map(|value| value.to_string()))
     else {
         app_warn!(
             "license",
-            "activation system disabled: missing ACTIVATION_MASTER_KEY"
+            "license system disabled: missing LICENSE_PUBLIC_KEY"
         );
         return Ok(None);
     };
 
-    if key.trim().is_empty() {
-        app_warn!(
-            "license",
-            "activation system disabled: empty ACTIVATION_MASTER_KEY"
-        );
+    if public_key.trim().is_empty() {
         return Ok(None);
     }
 
-    let owner = env::var("ACTIVATION_REMOTE_OWNER")
+    let revocation_url = env::var("LICENSE_REVOCATION_URL")
         .ok()
-        .or_else(|| option_env!("ACTIVATION_REMOTE_OWNER").map(|value| value.to_string()))
-        .or_else(|| env::var("GITHUB_OWNER").ok())
-        .unwrap_or_else(|| "Super1Windcloud".to_string());
-    let repo = env::var("ACTIVATION_REMOTE_REPO")
-        .ok()
-        .or_else(|| option_env!("ACTIVATION_REMOTE_REPO").map(|value| value.to_string()))
-        .or_else(|| env::var("GITHUB_REPO").ok())
-        .unwrap_or_else(|| "automatic-coder".to_string());
-    let tag = env::var("ACTIVATION_REMOTE_TAG")
-        .ok()
-        .or_else(|| option_env!("ACTIVATION_REMOTE_TAG").map(|value| value.to_string()))
-        .or_else(|| env::var("GITHUB_RELEASE_TAG").ok())
-        .unwrap_or_else(|| app_handle.package_info().version.to_string());
-    let token = env::var("ACTIVATION_REMOTE_TOKEN")
-        .ok()
-        .or_else(|| option_env!("ACTIVATION_REMOTE_TOKEN").map(|value| value.to_string()))
-        .or_else(|| env::var("GITHUB_TOKEN").ok())
+        .or_else(|| option_env!("LICENSE_REVOCATION_URL").map(|value| value.to_string()))
         .unwrap_or_default();
-    let raw_url = env::var("ACTIVATION_REMOTE_URL")
+    let offline_grace_seconds = env::var("LICENSE_OFFLINE_GRACE_HOURS")
         .ok()
-        .or_else(|| option_env!("ACTIVATION_REMOTE_URL").map(|value| value.to_string()))
-        .unwrap_or_else(|| DEFAULT_ACTIVATION_REMOTE_URL.to_string());
+        .or_else(|| option_env!("LICENSE_OFFLINE_GRACE_HOURS").map(|value| value.to_string()))
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(72)
+        * 60
+        * 60;
+    let sync_interval_seconds = env::var("LICENSE_SYNC_INTERVAL_SECONDS")
+        .ok()
+        .or_else(|| option_env!("LICENSE_SYNC_INTERVAL_SECONDS").map(|value| value.to_string()))
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_REVOCATION_SYNC_INTERVAL_SECS);
 
-    if token.trim().is_empty() && raw_url.trim().is_empty() {
-        app_warn!(
-            "license",
-            "activation system disabled: missing GITHUB_TOKEN/ACTIVATION_REMOTE_TOKEN"
-        );
-        return Ok(None);
-    }
+    let cache_dir = resolve_license_cache_dir(app_handle)?;
+    fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
 
-    Ok(Some(ActivationBootstrap {
-        activation_key: key,
-        remote: RemoteActivationConfig {
-            owner,
-            repo,
-            tag,
-            token,
-            raw_url,
-        },
+    Ok(Some(LicenseBootstrap {
+        public_key,
+        revocation_url,
+        offline_grace_seconds,
+        sync_interval_seconds,
     }))
 }
 
@@ -345,47 +364,212 @@ pub fn show_main_window_now(app_handle: &AppHandle) {
     }
 }
 
-pub fn load_activation_status(roots: &[PathBuf]) -> ActivationStatus {
-    let mut first = true;
-    if !roots.is_empty()
-        && roots
-            .iter()
-            .all(|root| find_status_file(root, &mut first).is_some())
-    {
-        return ActivationStatus { activated: true };
+pub fn load_activation_status(app_handle: &AppHandle, public_key: &str) -> ActivationStatus {
+    let cache_dir = match resolve_license_cache_dir(app_handle) {
+        Ok(dir) => dir,
+        Err(err) => {
+            app_error!("license", "{err}");
+            return ActivationStatus::default();
+        }
+    };
+
+    match load_valid_license_claims_from_dir(&cache_dir, public_key) {
+        Ok(Some(_)) => ActivationStatus { activated: true },
+        Ok(None) => ActivationStatus::default(),
+        Err(err) => {
+            app_warn!("license", "failed to load local license: {err}");
+            ActivationStatus::default()
+        }
     }
-    ActivationStatus::default()
 }
 
-pub fn persist_status(roots: &[PathBuf], activation_code: &str) -> Result<(), LicenseError> {
-    let fingerprint = derive_activation_fingerprint(activation_code);
-    let mut first = true;
-    for root in roots {
-        let target_dir = root.join(&fingerprint);
-        if !target_dir.exists() {
-            fs::create_dir_all(&target_dir)?;
-        }
-        let path = if first {
-            first = false;
-            target_dir.join(ACTIVATION_STATUS_FILE[1])
-        } else {
-            target_dir.join(ACTIVATION_STATUS_FILE[0])
-        };
-        fs::write(path, &fingerprint)?;
+pub fn start_revocation_monitor(app_handle: &AppHandle) {
+    let state: State<LicenseState> = app_handle.state();
+    if state
+        .monitor_started
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return;
     }
+
+    let app = app_handle.clone();
+    let interval_seconds = state
+        .sync_interval_seconds()
+        .unwrap_or(DEFAULT_REVOCATION_SYNC_INTERVAL_SECS);
+    tauri::async_runtime::spawn(async move {
+        loop {
+            sleep(Duration::from_secs(interval_seconds)).await;
+            if let Err(err) = refresh_runtime_license(&app).await {
+                app_warn!("license", "background license refresh failed: {err}");
+            }
+        }
+    });
+}
+
+pub async fn refresh_runtime_license(app_handle: &AppHandle) -> Result<(), String> {
+    let state: State<LicenseState> = app_handle.state();
+    if !state.is_enabled() || !state.is_activated() {
+        return Ok(());
+    }
+
+    let Some(context) = state.context() else {
+        return Ok(());
+    };
+    let Some(claims) = load_valid_license_claims_from_dir(&context.cache_dir, &context.public_key)?
+    else {
+        invalidate_runtime_license(app_handle, "missing_or_invalid_license");
+        return Ok(());
+    };
+
+    match resolve_revocation_status(&context, &claims.license_id).await {
+        Ok(true) => invalidate_runtime_license(app_handle, "revoked"),
+        Ok(false) => {}
+        Err(_) => invalidate_runtime_license(app_handle, "revocation_unavailable"),
+    }
+
     Ok(())
 }
 
-fn derive_activation_fingerprint(activation_code: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(activation_code.trim().as_bytes());
-    hasher.update(collect_machine_signature().as_bytes());
-    let digest = hasher.finalize();
-    let mut output = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        write!(&mut output, "{:02x}", byte).expect("writing to String cannot fail");
+fn invalidate_runtime_license(app_handle: &AppHandle, reason: &str) {
+    let state: State<LicenseState> = app_handle.state();
+    state.set_activated(false);
+    if let Some(main) = app_handle.get_webview_window("main") {
+        let _ = main.hide();
     }
-    output
+    open_activation_window(app_handle);
+    let _ = app_handle.emit("activation_revoked", reason.to_string());
+}
+
+fn resolve_license_cache_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    app_handle
+        .path()
+        .app_local_data_dir()
+        .map(|dir| dir.join("license"))
+        .map_err(|err| format!("failed to resolve license cache dir: {err}"))
+}
+
+fn persist_license(context: &LicenseRuntimeContext, signed_license: &str) -> Result<(), String> {
+    fs::create_dir_all(&context.cache_dir).map_err(|err| err.to_string())?;
+    fs::write(
+        context.cache_dir.join(LICENSE_FILE_NAME),
+        signed_license.trim(),
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn load_valid_license_claims_from_dir(
+    cache_dir: &Path,
+    public_key: &str,
+) -> Result<Option<license_manager::LicenseClaims>, String> {
+    let path = cache_dir.join(LICENSE_FILE_NAME);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let signed_license = fs::read_to_string(path).map_err(|err| err.to_string())?;
+    validate_signed_license(&signed_license, public_key)
+        .map(Some)
+        .map_err(|err| err.to_string())
+}
+
+fn validate_signed_license(
+    signed_license: &str,
+    public_key: &str,
+) -> Result<license_manager::LicenseClaims, LicenseValidationError> {
+    let claims = verify_signed_license(public_key, signed_license).map_err(|err| {
+        let message = err.to_string();
+        if message.contains("signature") {
+            LicenseValidationError::InvalidSignature
+        } else {
+            LicenseValidationError::InvalidFormat
+        }
+    })?;
+
+    if claims.machine_id != compute_machine_id() {
+        return Err(LicenseValidationError::MachineMismatch);
+    }
+
+    if let Some(expires_at) = claims.expires_at
+        && expires_at <= now_unix_seconds()
+    {
+        return Err(LicenseValidationError::Expired);
+    }
+
+    Ok(claims)
+}
+
+async fn resolve_revocation_status(
+    context: &LicenseRuntimeContext,
+    license_id: &str,
+) -> Result<bool, LicenseValidationError> {
+    if context.revocation_url.trim().is_empty() {
+        return Ok(false);
+    }
+
+    match fetch_and_cache_revocations(context).await {
+        Ok(revoked) => Ok(revoked.iter().any(|item| item == license_id)),
+        Err(err) => {
+            app_warn!("license", "failed to fetch remote revocations: {err}");
+            if let Some(cached) = load_cached_revocations(context)? {
+                if now_unix_seconds().saturating_sub(cached.fetched_at)
+                    <= context.offline_grace_seconds
+                {
+                    let payload =
+                        verify_signed_revocation_list(&context.public_key, &cached.signed_payload)
+                            .map_err(|_| LicenseValidationError::InvalidSignature)?;
+                    return Ok(payload.revoked.iter().any(|item| item == license_id));
+                }
+            }
+            Err(LicenseValidationError::RevocationUnavailable)
+        }
+    }
+}
+
+async fn fetch_and_cache_revocations(
+    context: &LicenseRuntimeContext,
+) -> Result<Vec<String>, String> {
+    let response = context
+        .client
+        .get(&context.revocation_url)
+        .header("User-Agent", "InterviewCoder/revocations")
+        .send()
+        .await
+        .map_err(|err| err.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("unexpected status {}", response.status()));
+    }
+    let body = response.text().await.map_err(|err| err.to_string())?;
+    let payload =
+        verify_signed_revocation_list(&context.public_key, &body).map_err(|err| err.to_string())?;
+    let cache = RevocationCache {
+        fetched_at: now_unix_seconds(),
+        signed_payload: body,
+    };
+    fs::create_dir_all(&context.cache_dir).map_err(|err| err.to_string())?;
+    fs::write(
+        context.cache_dir.join(REVOCATION_CACHE_FILE_NAME),
+        serde_json::to_string_pretty(&cache).map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(payload.revoked)
+}
+
+fn load_cached_revocations(
+    context: &LicenseRuntimeContext,
+) -> Result<Option<RevocationCache>, LicenseValidationError> {
+    let path = context.cache_dir.join(REVOCATION_CACHE_FILE_NAME);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw =
+        fs::read_to_string(path).map_err(|_| LicenseValidationError::RevocationUnavailable)?;
+    let parsed: RevocationCache =
+        serde_json::from_str(&raw).map_err(|_| LicenseValidationError::RevocationUnavailable)?;
+    Ok(Some(parsed))
+}
+
+fn compute_machine_id() -> String {
+    create_machine_id(&collect_machine_signature())
 }
 
 fn collect_machine_signature() -> String {
@@ -416,358 +600,33 @@ fn collect_machine_signature() -> String {
         parts.push(distro);
     }
 
-    if let Some(home) = home_dir() {
-        if !home.as_os_str().is_empty() {
-            parts.push(home.display().to_string());
-        }
-    }
-
-    if let Ok(machine) = env::var("COMPUTERNAME").or_else(|_| env::var("HOSTNAME")) {
-        if !machine.is_empty() {
-            parts.push(machine);
-        }
-    }
-
-    if let Ok(identifier) = env::var("PROCESSOR_IDENTIFIER") {
-        if !identifier.is_empty() {
-            parts.push(identifier);
-        }
-    }
-
-    parts.join("|")
-}
-
-fn find_status_file(root: &Path, first: &mut bool) -> Option<PathBuf> {
-    if !root.exists() {
-        app_debug!("license", "status root does not exist: {}", root.display());
-        return None;
-    }
-    let entries = fs::read_dir(root).ok()?;
-    for entry in entries.flatten() {
-        if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-            continue;
-        }
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if name_str.len() != 64 || !name_str.chars().all(|c| c.is_ascii_hexdigit()) {
-            continue;
-        }
-        let candidate = if *first {
-            *first = false;
-            entry.path().join(ACTIVATION_STATUS_FILE[1])
-        } else {
-            entry.path().join(ACTIVATION_STATUS_FILE[0])
-        };
-        if candidate.exists() {
-            app_info!("license", "found status file: {}", candidate.display());
-            return Some(candidate);
-        } else {
-            app_debug!("license", "not found status file: {}", candidate.display());
-        }
-    }
-
-    None
-}
-
-#[derive(Debug)]
-pub enum ActivationFlowError {
-    Disabled(String),
-    License(LicenseError),
-    Remote(String),
-}
-
-impl fmt::Display for ActivationFlowError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ActivationFlowError::Disabled(msg) => write!(f, "{msg}"),
-            ActivationFlowError::License(err) => write!(f, "{err}"),
-            ActivationFlowError::Remote(msg) => write!(f, "{msg}"),
-        }
-    }
-}
-
-impl From<LicenseError> for ActivationFlowError {
-    fn from(value: LicenseError) -> Self {
-        ActivationFlowError::License(value)
-    }
-}
-
-impl From<reqwest::Error> for ActivationFlowError {
-    fn from(value: reqwest::Error) -> Self {
-        ActivationFlowError::Remote(value.to_string())
-    }
-}
-
-impl From<std::io::Error> for ActivationFlowError {
-    fn from(value: std::io::Error) -> Self {
-        ActivationFlowError::Remote(value.to_string())
-    }
-}
-
-const GITHUB_API_BASE: &str = "https://api.github.com";
-
-struct RemoteActivationLock {
-    config: RemoteActivationConfig,
-    client: Client,
-    #[allow(dead_code)]
-    release_id: Option<u64>,
-    asset_id: Option<u64>,
-    file_name: String,
-    upload_url: Option<String>,
-    file: NamedTempFile,
-}
-
-impl RemoteActivationLock {
-    async fn acquire(
-        config: RemoteActivationConfig,
-        client: Client,
-    ) -> Result<Self, ActivationFlowError> {
-        app_info!("license", "acquiring remote activation payload");
-        let (release_id, asset_id, file_name, upload_url, payload) =
-            if !config.raw_url.trim().is_empty() {
-                let payload = download_activation_payload_direct(&client, &config.raw_url).await?;
-                (
-                    None,
-                    None,
-                    REMOTE_ACTIVATION_FILE.to_string(),
-                    None,
-                    payload,
-                )
-            } else {
-                let release = fetch_release_by_tag(&client, &config).await?;
-                let asset = fetch_activation_asset(&client, &config, release.id).await?;
-                let payload = download_activation_payload(&client, &config, asset.id).await?;
-                (
-                    Some(release.id),
-                    Some(asset.id),
-                    asset.name,
-                    Some(release.upload_url),
-                    payload,
-                )
-            };
-        let mut file = NamedTempFile::new()?;
-        file.write_all(&payload)?;
-        Ok(Self {
-            config,
-            client,
-            release_id,
-            asset_id,
-            file_name,
-            upload_url,
-            file,
-        })
-    }
-
-    fn path(&self) -> &Path {
-        self.file.path()
-    }
-
-    async fn finalize_success(self) -> Result<(), ActivationFlowError> {
-        app_info!("license", "refreshing remote activation payload");
-        let RemoteActivationLock {
-            config,
-            client,
-            release_id: _,
-            asset_id,
-            file_name,
-            upload_url,
-            file,
-        } = self;
-
-        if !config.raw_url.trim().is_empty() {
-            app_info!(
-                "license",
-                "activation payload is read-only; skipping remote refresh"
-            );
-            return Ok(());
-        }
-
-        let asset_id = asset_id
-            .ok_or_else(|| ActivationFlowError::Remote("missing activation asset id".into()))?;
-        let upload_url = upload_url
-            .ok_or_else(|| ActivationFlowError::Remote("missing activation upload url".into()))?;
-
-        delete_activation_asset(&client, &config, asset_id).await?;
-        let path = file.path().to_path_buf();
-        upload_activation_payload(&client, &config, &upload_url, &file_name, &path).await
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct GithubRelease {
-    id: u64,
-    upload_url: String,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-struct GithubAsset {
-    id: u64,
-    name: String,
-}
-
-async fn fetch_release_by_tag(
-    client: &Client,
-    config: &RemoteActivationConfig,
-) -> Result<GithubRelease, ActivationFlowError> {
-    let url = format!(
-        "{GITHUB_API_BASE}/repos/{}/{}/releases/tags/{}",
-        config.owner, config.repo, config.tag
-    );
-    let response = client
-        .get(url)
-        .header("Authorization", format!("Bearer {}", config.token))
-        .header("Accept", "application/vnd.github.v3+json")
-        .header("User-Agent", "InterviewCoder")
-        .send()
-        .await?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(ActivationFlowError::Remote(format!(
-            "failed to fetch release ({status}): {body}"
-        )));
-    }
-    response.json::<GithubRelease>().await.map_err(Into::into)
-}
-
-async fn fetch_activation_asset(
-    client: &Client,
-    config: &RemoteActivationConfig,
-    release_id: u64,
-) -> Result<GithubAsset, ActivationFlowError> {
-    let url = format!(
-        "{GITHUB_API_BASE}/repos/{}/{}/releases/{release_id}/assets",
-        config.owner, config.repo
-    );
-    let response = client
-        .get(url)
-        .header("Authorization", format!("Bearer {}", config.token))
-        .header("Accept", "application/vnd.github.v3+json")
-        .header("User-Agent", "InterviewCoder")
-        .send()
-        .await?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(ActivationFlowError::Remote(format!(
-            "failed to list release assets ({status}): {body}"
-        )));
-    }
-    let assets = response.json::<Vec<GithubAsset>>().await?;
-    if assets.is_empty() {
-        return Err(ActivationFlowError::Remote(
-            "no activation payload available on remote release".into(),
-        ));
-    }
-
-    if let Some(found) = assets
-        .iter()
-        .find(|asset| asset.name == REMOTE_ACTIVATION_FILE)
-        .cloned()
+    if let Some(home) = home_dir()
+        && !home.as_os_str().is_empty()
     {
-        return Ok(found);
+        parts.push(home.display().to_string());
     }
 
-    Ok(assets[0].clone())
+    if let Ok(machine) = env::var("COMPUTERNAME").or_else(|_| env::var("HOSTNAME"))
+        && !machine.is_empty()
+    {
+        parts.push(machine);
+    }
+
+    if let Ok(identifier) = env::var("PROCESSOR_IDENTIFIER")
+        && !identifier.is_empty()
+    {
+        parts.push(identifier);
+    }
+
+    app_debug!("license", "machine signature parts collected");
+    let mut hasher = Sha256::new();
+    hasher.update(parts.join("|").as_bytes());
+    hex::encode(hasher.finalize())
 }
 
-async fn download_activation_payload(
-    client: &Client,
-    config: &RemoteActivationConfig,
-    asset_id: u64,
-) -> Result<Vec<u8>, ActivationFlowError> {
-    let url = format!(
-        "{GITHUB_API_BASE}/repos/{}/{}/releases/assets/{asset_id}",
-        config.owner, config.repo
-    );
-    let response = client
-        .get(url)
-        .header("Authorization", format!("Bearer {}", config.token))
-        .header("Accept", "application/octet-stream")
-        .header("User-Agent", "InterviewCoder")
-        .send()
-        .await?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(ActivationFlowError::Remote(format!(
-            "failed to download activation payload ({status}): {body}"
-        )));
-    }
-    Ok(response.bytes().await?.to_vec())
-}
-
-async fn download_activation_payload_direct(
-    client: &Client,
-    url: &str,
-) -> Result<Vec<u8>, ActivationFlowError> {
-    let response = client
-        .get(url)
-        .header("User-Agent", "InterviewCoder")
-        .send()
-        .await?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(ActivationFlowError::Remote(format!(
-            "failed to download activation payload ({status}): {body}"
-        )));
-    }
-    Ok(response.bytes().await?.to_vec())
-}
-
-async fn delete_activation_asset(
-    client: &Client,
-    config: &RemoteActivationConfig,
-    asset_id: u64,
-) -> Result<(), ActivationFlowError> {
-    let url = format!(
-        "{GITHUB_API_BASE}/repos/{}/{}/releases/assets/{asset_id}",
-        config.owner, config.repo
-    );
-    let response = client
-        .delete(url)
-        .header("Authorization", format!("Bearer {}", config.token))
-        .header("Accept", "application/vnd.github.v3+json")
-        .header("User-Agent", "InterviewCoder")
-        .send()
-        .await?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(ActivationFlowError::Remote(format!(
-            "failed to delete activation payload ({status}): {body}"
-        )));
-    }
-    Ok(())
-}
-
-async fn upload_activation_payload(
-    client: &Client,
-    config: &RemoteActivationConfig,
-    upload_url: &str,
-    file_name: &str,
-    path: &Path,
-) -> Result<(), ActivationFlowError> {
-    // upload_url is usually like "https://uploads.github.com/repos/owner/repo/releases/id/assets{?name,label}"
-    let base_url = upload_url.split('{').next().unwrap();
-    let url = format!("{}?name={}", base_url, file_name);
-
-    let bytes = fs::read(path)?;
-    let response = client
-        .post(url)
-        .header("Authorization", format!("Bearer {}", config.token))
-        .header("Content-Type", "application/octet-stream")
-        .header("User-Agent", "InterviewCoder")
-        .body(bytes)
-        .send()
-        .await?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(ActivationFlowError::Remote(format!(
-            "failed to upload activation payload ({status}): {body}"
-        )));
-    }
-    Ok(())
+fn now_unix_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }

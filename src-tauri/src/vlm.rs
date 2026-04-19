@@ -2,6 +2,7 @@
 
 use crate::capture::capture_screen_png_bytes;
 use crate::config::{AppState, DEFAULT_VLM_MODEL, alternate_vlm_model, persist_vlm_model};
+use crate::lan::{append_answer_snapshot, clear_answer_snapshot, set_answer_snapshot};
 use crate::utils::{get_custom_openai_config, get_env_key};
 use crate::{app_debug, app_error, app_info, app_warn};
 use base64::{Engine, engine::general_purpose};
@@ -150,6 +151,7 @@ fn append_segment(app_handle: &AppHandle, buffer: &mut String, text: &str) -> bo
         return false;
     }
     buffer.push_str(text);
+    append_answer_snapshot(app_handle, text);
     if let Err(err) = app_handle.emit("completion_stream", text) {
         app_error!("vlm", "completion_stream 事件发送失败: {err}");
     }
@@ -263,10 +265,11 @@ fn handle_openai_event(
         return Ok(());
     }
 
-    let json_chunk: Value = serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
-        raw: trimmed.to_string(),
-        source,
-    })?;
+    let json_chunk: Value =
+        serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
+            raw: trimmed.to_string(),
+            source,
+        })?;
 
     if let Some(error) = json_chunk.get("error") {
         let message = error
@@ -297,7 +300,10 @@ fn handle_openai_event(
     }
 
     let appended = append_choice_content(app_handle, choice, result);
-    if !appended && strict_choices && choice.get("delta").is_none() && choice.get("message").is_none()
+    if !appended
+        && strict_choices
+        && choice.get("delta").is_none()
+        && choice.get("message").is_none()
     {
         return Err(VlmError::StreamShape(format!(
             "响应缺少 delta 或 message 字段，原始片段: {}",
@@ -323,10 +329,11 @@ fn handle_responses_event(
         return Ok(());
     }
 
-    let json_chunk: Value = serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
-        raw: trimmed.to_string(),
-        source,
-    })?;
+    let json_chunk: Value =
+        serde_json::from_str(trimmed).map_err(|source| VlmError::StreamJson {
+            raw: trimmed.to_string(),
+            source,
+        })?;
 
     if let Some(error) = json_chunk.get("error") {
         let message = error
@@ -428,10 +435,13 @@ async fn consume_sse_stream(
     let mut finished = false;
     let mut pending = String::new();
 
-    while let Some(chunk) = timeout(Duration::from_secs(STREAM_CHUNK_TIMEOUT_SECONDS), res.chunk())
-        .await
-        .map_err(|_| VlmError::Timeout(chunk_timeout_label))?
-        .map_err(VlmError::Chunk)?
+    while let Some(chunk) = timeout(
+        Duration::from_secs(STREAM_CHUNK_TIMEOUT_SECONDS),
+        res.chunk(),
+    )
+    .await
+    .map_err(|_| VlmError::Timeout(chunk_timeout_label))?
+    .map_err(VlmError::Chunk)?
     {
         let text = String::from_utf8_lossy(&chunk);
         pending.push_str(&text);
@@ -708,10 +718,10 @@ async fn request_custom_openai_stream(
     let chat_endpoint = format!("{}/chat/completions", base_url);
     let res = send_request_with_timeout(
         client
-        .post(chat_endpoint)
-        .bearer_auth(api_key)
-        .json(&chat_body)
-        .send(),
+            .post(chat_endpoint)
+            .bearer_auth(api_key)
+            .json(&chat_body)
+            .send(),
         "自定义 OpenAI 接口请求",
     )
     .await?;
@@ -731,20 +741,26 @@ async fn request_custom_openai_stream(
         },
     )
     .await?;
-    app_info!("vlm", "custom openai request succeeded via /chat/completions");
+    app_info!(
+        "vlm",
+        "custom openai request succeeded via /chat/completions"
+    );
     Ok(result)
 }
 
 #[tauri::command]
 pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<String, String> {
     let state = app_handle.state::<AppState>();
+    clear_answer_snapshot(&app_handle);
     let (custom_openai_enabled, _, _, custom_model) = get_custom_openai_config();
     let prompt = state.prompt.lock().unwrap().clone();
     let direction = *state
         .capture_position
         .lock()
         .map_err(|_| "capture position lock poisoned".to_string())?;
-    let bytes = capture_screen_png_bytes(direction)?;
+    let bytes = capture_screen_png_bytes(direction).inspect_err(|err| {
+        set_answer_snapshot(&app_handle, format!("生成失败：{err}"));
+    })?;
     app_info!(
         "vlm",
         "using in-memory screenshot {} bytes ({:.2} KiB)",
@@ -773,6 +789,7 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
             let fallback_model = alternate_vlm_model(&model_name).to_string();
             if fallback_model == model_name {
                 log_vlm_error("request_chat_completion_stream", &model_name, &err);
+                set_answer_snapshot(&app_handle, format!("生成失败：模型 {model_name}: {err}"));
                 return Err(format!("模型 {model_name}: {err}"));
             }
             app_warn!(
@@ -791,17 +808,21 @@ pub async fn create_screenshot_solution_stream(app_handle: AppHandle) -> Result<
                         &fallback_model,
                         &retry_err,
                     );
+                    set_answer_snapshot(
+                        &app_handle,
+                        format!("生成失败：模型 {fallback_model}: {retry_err}"),
+                    );
                     Err(format!("模型 {fallback_model}: {retry_err}"))
                 }
             }
         }
         Err(err) => {
             log_vlm_error("request_chat_completion_stream", &model_name, &err);
+            set_answer_snapshot(&app_handle, format!("生成失败：模型 {model_name}: {err}"));
             Err(format!("模型 {model_name}: {err}"))
         }
     }
 }
-
 
 #[allow(unused)]
 trait ToF64 {

@@ -1,5 +1,6 @@
 mod capture;
 mod config;
+mod lan;
 mod license;
 mod system;
 mod utils;
@@ -8,16 +9,16 @@ mod vlm;
 use crate::{
     config::AppState,
     license::{
-        ActivationBootstrap, LicenseState, RemoteActivationConfig, get_activation_status,
-        open_activation_window, prepare_activation_repository, show_main_window_now,
-        submit_activation_code,
+        LicenseBootstrap, LicenseState, get_activation_status, get_machine_id,
+        open_activation_window, prepare_license_runtime, show_main_window_now,
+        start_revocation_monitor, submit_activation_code,
     },
 };
 use capture::*;
 use config::*;
 use dotenv::{dotenv, from_filename};
+use lan::{LanAnswerState, start_lan_answer_server};
 use license::load_activation_status;
-use std::{fs, path::PathBuf};
 use system::*;
 use tauri::{App, Manager, Wry};
 #[allow(unused_imports)]
@@ -61,6 +62,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
+        .manage(LanAnswerState::default())
         .manage(LicenseState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -80,6 +82,7 @@ pub fn run() {
             set_page_opacity,
             set_background_broadcast,
             get_activation_status,
+            get_machine_id,
             submit_activation_code
         ])
         .setup(|app| {
@@ -91,6 +94,9 @@ pub fn run() {
             load_preferences(app);
             create_tray_icon(app);
             create_shortcut(app);
+            if let Err(err) = start_lan_answer_server(app) {
+                app_error!("app", "{err}");
+            }
             check_activation_status(app);
             Ok(())
         })
@@ -103,21 +109,15 @@ fn check_activation_status_cheat(app: &mut App<Wry>) {
     let state: tauri::State<LicenseState> = app.state();
 
     // 1. 依然获取路径，确保 state.inner 不是 None
-    if let Ok(status_roots) = collect_status_roots(app) {
-        // 构造一个假的引导数据
-        let bootstrap = ActivationBootstrap {
-            activation_key: "DEV_KEY".into(),
-            remote: RemoteActivationConfig {
-                owner: "".into(),
-                repo: "".into(),
-                tag: "".into(),
-                token: "".into(),
-                raw_url: "".into(),
-            },
+    if let Ok(cache_dir) = app.path().app_local_data_dir() {
+        let bootstrap = LicenseBootstrap {
+            public_key: "DEV_KEY".into(),
+            revocation_url: String::new(),
+            offline_grace_seconds: 72 * 60 * 60,
+            sync_interval_seconds: 900,
         };
 
-        // 2. 强制初始化为“已激活”状态
-        state.initialize(bootstrap, status_roots, true);
+        state.initialize(bootstrap, cache_dir.join("license"), true);
 
         // 3. 必须注册快捷键
         register_activation_shortcut(app.handle());
@@ -128,65 +128,36 @@ fn check_activation_status_cheat(app: &mut App<Wry>) {
 }
 
 fn check_activation_status(app: &mut App<Wry>) {
-    match collect_status_roots(app) {
-        Ok(status_roots) => {
-            let status = load_activation_status(&status_roots);
-            let state: tauri::State<LicenseState> = app.state();
-            match prepare_activation_repository(app.handle()) {
-                Ok(Some(bootstrap)) => {
-                    let needs_activation = !status.activated;
-                    state.initialize(bootstrap, status_roots.clone(), status.activated);
-                    if needs_activation {
-                        open_activation_window(app.handle());
-                    } else {
-                        register_activation_shortcut(app.handle());
-                        // show_main_window_now(app.handle());
-                    }
-                }
-                Ok(None) => {
-                    state.disable();
-                    app_warn!(
-                        "app",
-                        "activation repository unavailable; continuing without activation gate"
-                    );
-                    register_activation_shortcut(app.handle());
-                    // show_main_window_now(app.handle());
-                }
-                Err(err) => {
-                    state.disable();
-                    app_error!("app", "activation repository initialisation failed: {err}");
-                    register_activation_shortcut(app.handle());
-                    // show_main_window_now(app.handle());
-                }
+    let state: tauri::State<LicenseState> = app.state();
+    match prepare_license_runtime(app.handle()) {
+        Ok(Some(bootstrap)) => {
+            let status = load_activation_status(app.handle(), &bootstrap.public_key);
+            let cache_dir = app
+                .path()
+                .app_local_data_dir()
+                .map(|dir| dir.join("license"))
+                .unwrap_or_else(|_| std::path::PathBuf::from(".license"));
+            let needs_activation = !status.activated;
+            state.initialize(bootstrap, cache_dir, status.activated);
+            start_revocation_monitor(app.handle());
+            if needs_activation {
+                open_activation_window(app.handle());
+            } else {
+                register_activation_shortcut(app.handle());
             }
         }
-        Err(err) => {
-            let state: tauri::State<LicenseState> = app.state();
+        Ok(None) => {
             state.disable();
-            app_error!("app", "{err}");
-            show_main_window_now(app.handle());
+            app_warn!(
+                "app",
+                "license runtime unavailable; continuing without activation gate"
+            );
+            register_activation_shortcut(app.handle());
+        }
+        Err(err) => {
+            state.disable();
+            app_error!("app", "license runtime initialisation failed: {err}");
+            register_activation_shortcut(app.handle());
         }
     }
-}
-
-fn collect_status_roots(app: &App<Wry>) -> Result<Vec<PathBuf>, String> {
-    let resolver = app.path();
-    let mut roots = Vec::with_capacity(3);
-    let targets = [
-        ("documents", resolver.document_dir()),
-        ("local", resolver.app_local_data_dir()),
-        ("roaming", resolver.app_data_dir()),
-    ];
-
-    for (label, dir_result) in targets {
-        let dir =
-            dir_result.map_err(|err| format!("failed to resolve {label} directory: {err}"))?;
-        if !dir.exists() {
-            fs::create_dir_all(&dir)
-                .map_err(|err| format!("failed to prepare {label} directory: {err}"))?;
-        }
-        roots.push(dir);
-    }
-
-    Ok(roots)
 }

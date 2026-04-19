@@ -2,6 +2,7 @@ use crate::config::{
     open_custom_openai_selector, open_language_selector, persist_background_broadcast,
     persist_custom_openai_enabled, persist_page_opacity, toggle_vlm_model,
 };
+use crate::lan::current_lan_urls;
 use crate::utils::{is_dev, toggle_webview_devtools};
 use crate::{app_debug, app_error, app_info};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -202,6 +203,54 @@ pub fn show_about_dialog(app: &AppHandle) {
         .title("关于 Interview Coder")
         .blocking_show();
 }
+
+pub fn show_help_dialog(app: &AppHandle) {
+    let lan_section = {
+        let urls = current_lan_urls(app);
+        if urls.is_empty() {
+            "局域网答案页\n- 服务启动后会监听 37999-38009 之间的可用端口\n- 完整访问地址可在应用启动日志中查看".to_string()
+        } else {
+            format!(
+                "局域网答案页\n- 可直接在同一局域网设备访问以下地址：\n- {}\n- 默认端口范围为 37999-38009",
+                urls.join("\n- ")
+            )
+        }
+    };
+
+    let message = format!(
+        "Interview Coder v{}\n\n\
+功能说明\n\
+- 截图识别题目并生成答案\n\
+- 答案窗口悬浮显示\n\
+- 支持后台播音\n\
+- 支持切换视觉模型\n\
+- 支持自定义 OpenAI 兼容接口\n\
+- 启动时自动开启局域网答案页\n\n\
+快捷键\n\
+- Alt+1: 截图\n\
+- Alt+2: 生成答案\n\
+- Alt+3: 打开偏好设置\n\
+- Alt+4: 切换模型\n\
+- Alt+5: 退出应用\n\
+- Alt+Space: 暂停/恢复播音\n\
+- Alt+↑↓←→: 移动窗口\n\
+- Alt+`: 重置窗口\n\
+- Ctrl+Shift+`: 显示/隐藏窗口\n\n\
+补充说明\n\
+- 后台播音开启后，前端窗口会隐藏，Alt+2 改为扬声器播报答案\n\
+- 已启用自定义 OpenAI 兼容 API 时，切换模型菜单会被禁用\n\
+- {}",
+        APP_VERSION,
+        lan_section
+    );
+
+    let _ = app
+        .dialog()
+        .message(message)
+        .title("帮助信息")
+        .blocking_show();
+}
+
 pub fn create_tray_icon(app: &mut App<Wry>) {
     #[cfg(target_os = "macos")]
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -222,58 +271,24 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
     let quit_i = MenuItem::with_id(app, "quit", "退出", true, Some("Alt+5")).unwrap();
     let code_language =
         MenuItem::with_id(app, "code_language", "偏好设置", true, Some("Alt+3")).unwrap();
-    let toggle_model =
-        MenuItem::with_id(
-            app,
-            "toggle_model",
-            "切换模型",
-            !initial_custom_openai_enabled,
-            Some("Alt+4"),
-        )
-        .unwrap();
-    let toggle_model_item = toggle_model.clone();
-    let custom_openai_settings =
-        MenuItem::with_id(app, "custom_openai_settings", "自定义 OpenAI 接口配置", true, None::<&str>)
-            .unwrap();
-    let shortcut_capture =
-        MenuItem::with_id(app, "shortcut_capture", "截图", false, Some("Alt+1")).unwrap();
-    let shortcut_answer =
-        MenuItem::with_id(app, "shortcut_answer", "答案", false, Some("Alt+2")).unwrap();
-    let shortcut_preferences =
-        MenuItem::with_id(app, "shortcut_preferences", "偏好设置", false, Some("Alt+3")).unwrap();
-    let shortcut_model =
-        MenuItem::with_id(app, "shortcut_model", "切换模型", false, Some("Alt+4")).unwrap();
-    let shortcut_exit =
-        MenuItem::with_id(app, "shortcut_exit", "退出", false, Some("Alt+5")).unwrap();
-    let shortcut_stop_audio =
-        MenuItem::with_id(
-            app,
-            "shortcut_stop_audio",
-            "暂停/恢复播音",
-            false,
-            Some("Alt+Space"),
-        )
-            .unwrap();
-    let shortcut_move =
-        MenuItem::with_id(app, "shortcut_move", "移动窗口", false, Some("Alt+↑↓←→")).unwrap();
-    let shortcut_reset =
-        MenuItem::with_id(app, "shortcut_reset", "重置窗口", false, Some("Alt+`")).unwrap();
-    let shortcut_hide = MenuItem::with_id(
+    let toggle_model = MenuItem::with_id(
         app,
-        "shortcut_hide",
-        "显示/隐藏窗口",
-        false,
-        Some("Ctrl+Shift+`"),
+        "toggle_model",
+        "切换模型",
+        !initial_custom_openai_enabled,
+        Some("Alt+4"),
     )
     .unwrap();
-    let background_broadcast_help = MenuItem::with_id(
+    let toggle_model_item = toggle_model.clone();
+    let custom_openai_settings = MenuItem::with_id(
         app,
-        "background_broadcast_help",
-        "后台播音：开启后隐藏前端，Alt+2 答案改为扬声器播报",
-        false,
+        "custom_openai_settings",
+        "自定义 OpenAI 接口配置",
+        true,
         None::<&str>,
     )
     .unwrap();
+    let help_item = MenuItem::with_id(app, "help", "帮助信息", true, None::<&str>).unwrap();
     let background_broadcast = CheckMenuItem::with_id(
         app,
         "background_broadcast",
@@ -404,29 +419,11 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         ],
     )
     .unwrap();
-    let shortcut_help_submenu = Submenu::with_items(
-        app,
-        "快捷键帮助",
-        true,
-        &[
-            &shortcut_capture,
-            &shortcut_answer,
-            &shortcut_stop_audio,
-            &shortcut_preferences,
-            &shortcut_model,
-            &shortcut_exit,
-            &shortcut_move,
-            &shortcut_reset,
-            &shortcut_hide,
-            &background_broadcast_help,
-        ],
-    )
-    .unwrap();
     let menu = Menu::with_items(
         app,
         &[
             &about_item,
-            &shortcut_help_submenu,
+            &help_item,
             &code_language,
             &toggle_model,
             &custom_openai_settings,
@@ -455,7 +452,10 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                     *state.custom_openai_enabled.lock().unwrap()
                 };
                 if custom_openai_enabled {
-                    app_info!("system", "toggle model ignored because custom openai is enabled");
+                    app_info!(
+                        "system",
+                        "toggle model ignored because custom openai is enabled"
+                    );
                     return;
                 }
                 match toggle_vlm_model(app) {
@@ -482,7 +482,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                         }
                     }
                 }
-            },
+            }
             "custom_openai_settings" => {
                 open_custom_openai_selector(app);
             }
@@ -505,14 +505,21 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
                 Ok(enabled) => match persist_background_broadcast(app, enabled) {
                     Ok(saved_enabled) => {
                         let _ = background_broadcast_item.set_checked(saved_enabled);
-                        app_info!("system", "background broadcast changed to {}", saved_enabled);
+                        app_info!(
+                            "system",
+                            "background broadcast changed to {}",
+                            saved_enabled
+                        );
                     }
                     Err(err) => {
                         app_error!("system", "{err}");
                     }
                 },
                 Err(err) => {
-                    app_error!("system", "failed to read background broadcast menu state: {err}");
+                    app_error!(
+                        "system",
+                        "failed to read background broadcast menu state: {err}"
+                    );
                 }
             },
             "page_opacity_100" => apply_page_opacity_from_tray(app, 1.0, &opacity_items),
@@ -524,6 +531,7 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             "page_opacity_40" => apply_page_opacity_from_tray(app, 0.4, &opacity_items),
             "page_opacity_30" => apply_page_opacity_from_tray(app, 0.3, &opacity_items),
             "page_opacity_20" => apply_page_opacity_from_tray(app, 0.2, &opacity_items),
+            "help" => show_help_dialog(app),
             "about" => show_about_dialog(app),
             _ => {}
         })

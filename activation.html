@@ -104,16 +104,31 @@
             background: rgba(16, 185, 129, 0.18);
             color: #bbf7d0;
         }
+
+        .machine-box {
+            margin: 0 0 18px;
+            padding: 12px;
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            word-break: break-all;
+            font-size: 12px;
+            color: rgba(226, 232, 240, 0.9);
+        }
     </style>
 </head>
 <body>
 <main class="card">
-    <h1>输入激活码</h1>
-    <p class="description">请粘贴收到的加密激活码，完成验证后即可开始使用。</p>
+    <h1>输入许可证</h1>
+    <p class="description">把当前机器码发给宿主机签发许可证，然后将收到的签名许可证完整粘贴到下方。</p>
+    <div class="machine-box">
+        当前机器码：
+        <div id="machine-id">正在读取...</div>
+    </div>
     <form id="activation-form">
         <textarea
                 id="activation-code"
-                placeholder="粘贴加密激活码"
+                placeholder="粘贴签名许可证"
                 autocomplete="off"
                 spellcheck="false"
         ></textarea>

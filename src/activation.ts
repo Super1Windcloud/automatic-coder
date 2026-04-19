@@ -17,6 +17,9 @@ const textarea = document.getElementById(
 const statusBox = document.getElementById(
   'activation-status',
 ) as HTMLDivElement | null
+const machineIdBox = document.getElementById(
+  'machine-id',
+) as HTMLDivElement | null
 const submitButton = document.querySelector<HTMLButtonElement>('button.submit')
 const logger = createScopedLogger('activation')
 
@@ -51,6 +54,17 @@ async function ensureState() {
   } catch (err) {
     logger.error('failed to query activation status', err)
     updateStatus('无法验证激活状态，请重试或联系支持。', 'error')
+  }
+}
+
+async function loadMachineId() {
+  try {
+    const machineId = await invoke<string>('get_machine_id')
+    if (machineIdBox) {
+      machineIdBox.textContent = machineId
+    }
+  } catch (err) {
+    logger.error('failed to load machine id', err)
   }
 }
 
@@ -92,6 +106,24 @@ async function handleSubmit(event: Event) {
       case 'pending_initialisation':
         updateStatus('激活系统尚未就绪，请稍后重试。', 'error')
         break
+      case 'invalid_signature':
+        updateStatus('许可证签名无效，请确认内容来源。', 'error')
+        break
+      case 'invalid_format':
+        updateStatus('许可证格式错误，请重新粘贴完整内容。', 'error')
+        break
+      case 'machine_mismatch':
+        updateStatus('该许可证不属于当前机器，请重新签发。', 'error')
+        break
+      case 'expired':
+        updateStatus('该许可证已过期，请联系发行方续期。', 'error')
+        break
+      case 'revoked':
+        updateStatus('该机器的许可证已被远程吊销。', 'error')
+        break
+      case 'revocation_unavailable':
+        updateStatus('暂时无法校验远程吊销列表，请联网后重试。', 'error')
+        break
       case 'disabled':
         updateStatus('当前版本未启用激活校验。', 'info')
         setTimeout(() => {
@@ -112,6 +144,7 @@ async function handleSubmit(event: Event) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await ensureState()
+  await loadMachineId()
   textarea?.focus()
   form?.addEventListener('submit', handleSubmit)
 })
