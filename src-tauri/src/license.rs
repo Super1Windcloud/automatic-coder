@@ -477,9 +477,7 @@ pub fn host_diagnose_revocations() -> Result<RevocationDiagnosticPayload, String
         return Err("missing LICENSE_PUBLIC_KEY".into());
     }
 
-    let path = env::current_dir()
-        .map_err(|err| err.to_string())?
-        .join(REVOCATION_CACHE_FILE_NAME);
+    let path = resolve_workspace_revocations_path();
     let entries = load_signed_revocation_payloads_from_path(&path)?;
     let mut items = Vec::with_capacity(entries.len());
     let mut valid = 0usize;
@@ -751,10 +749,8 @@ fn persist_host_revocations(app_handle: &AppHandle, signed_payload: &str) -> Res
     payloads.push(next_payload);
     let serialized = serde_json::to_string_pretty(&payloads).map_err(|err| err.to_string())?;
     fs::write(&path, &serialized).map_err(|err| err.to_string())?;
-    if let Ok(workspace_dir) = env::current_dir() {
-        let workspace_path = workspace_dir.join(REVOCATION_CACHE_FILE_NAME);
-        fs::write(workspace_path, &serialized).map_err(|err| err.to_string())?;
-    }
+    let workspace_path = resolve_workspace_revocations_path();
+    fs::write(workspace_path, &serialized).map_err(|err| err.to_string())?;
     Ok(())
 }
 
@@ -803,6 +799,12 @@ fn load_signed_revocation_payloads_from_path(path: &Path) -> Result<Vec<serde_js
         serde_json::Value::Object(_) => Ok(vec![parsed]),
         _ => Err("invalid revocations.json format".into()),
     }
+}
+
+fn resolve_workspace_revocations_path() -> PathBuf {
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_dir = crate_dir.parent().unwrap_or(crate_dir.as_path());
+    workspace_dir.join(REVOCATION_CACHE_FILE_NAME)
 }
 
 fn collect_revoked_ids_from_values(
