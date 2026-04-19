@@ -598,7 +598,15 @@ fn validate_signed_license(
         }
     })?;
 
-    if claims.machine_id != compute_machine_id() {
+    // 实时计算当前机器的硬件指纹并比对
+    let current_machine_id = compute_machine_id();
+    if claims.machine_id != current_machine_id {
+        app_warn!(
+            "license",
+            "machine mismatch: license={}, current={}",
+            claims.machine_id,
+            current_machine_id
+        );
         return Err(LicenseValidationError::MachineMismatch);
     }
 
