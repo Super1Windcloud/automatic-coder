@@ -327,6 +327,9 @@ pub fn prepare_license_runtime(app_handle: &AppHandle) -> Result<Option<LicenseB
 
 pub fn host_management_available(_app_handle: &AppHandle) -> bool {
     hydrate_activation_env();
+    if !host_machine_matches_current() {
+        return false;
+    }
     let private_ready = env::var("LICENSE_PRIVATE_KEY")
         .ok()
         .or_else(|| option_env!("LICENSE_PRIVATE_KEY").map(|value| value.to_string()))
@@ -754,6 +757,9 @@ fn now_unix_seconds() -> u64 {
 
 fn load_host_private_key() -> Result<String, String> {
     hydrate_activation_env();
+    if !host_machine_matches_current() {
+        return Err("host private key is not available on this machine".into());
+    }
     let private_key = env::var("LICENSE_PRIVATE_KEY")
         .ok()
         .or_else(|| option_env!("LICENSE_PRIVATE_KEY").map(|value| value.to_string()))
@@ -762,4 +768,15 @@ fn load_host_private_key() -> Result<String, String> {
         return Err("LICENSE_PRIVATE_KEY is not configured on this machine".into());
     }
     Ok(private_key)
+}
+
+fn host_machine_matches_current() -> bool {
+    let Some(expected_machine_id) = option_env!("HOST_MACHINE_ID") else {
+        return true;
+    };
+    let expected_machine_id = expected_machine_id.trim();
+    if expected_machine_id.is_empty() {
+        return true;
+    }
+    compute_machine_id() == expected_machine_id
 }

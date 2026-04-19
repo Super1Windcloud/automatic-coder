@@ -87,7 +87,7 @@ issueButton?.addEventListener('click', async () => {
     setStatus(issueStatus, '许可证已生成。')
   } catch (err) {
     logger.error('issue license failed', err)
-    setStatus(issueStatus, '生成许可证失败，请检查宿主机密钥配置。', true)
+    setStatus(issueStatus, '生成许可证失败，请检查当前机器是否为宿主机构建机器。', true)
   }
 })
 
@@ -139,7 +139,7 @@ async function loadContext() {
     }
   } catch (err) {
     logger.error('load host context failed', err)
-    setStatus(issueStatus, '加载宿主管理配置失败。', true)
+    setStatus(issueStatus, '加载宿主管理配置失败，当前机器可能没有宿主权限。', true)
   }
 }
 

@@ -1,12 +1,10 @@
 import { spawnSync } from 'node:child_process'
 
-const args = process.argv.slice(2)
-const isHostBuild = args.includes('--host')
-
 const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+const hostMachineId = resolveHostMachineId()
 const env = {
   ...process.env,
-  INTERVIEW_CODER_HOST_BUILD: isHostBuild ? '1' : '0',
+  INTERVIEW_CODER_HOST_MACHINE_ID: hostMachineId,
 }
 
 const result = spawnSync(command, ['tauri', 'build'], {
@@ -20,3 +18,24 @@ if (typeof result.status === 'number') {
 }
 
 process.exit(1)
+
+function resolveHostMachineId() {
+  const cargoCommand = process.platform === 'win32' ? 'cargo.exe' : 'cargo'
+  const result = spawnSync(
+    cargoCommand,
+    ['run', '-p', 'license_manager', '--bin', 'host_machine_id', '--quiet'],
+    {
+      cwd: `${process.cwd()}/src-tauri`,
+      env: process.env,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+    },
+  )
+
+  const machineId = result.stdout?.trim()
+  if (result.status !== 0 || !machineId) {
+    process.exit(result.status ?? 1)
+  }
+
+  return machineId
+}

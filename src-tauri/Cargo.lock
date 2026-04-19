@@ -3096,6 +3096,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
+ "dirs",
  "dotenv",
  "ed25519-dalek",
  "hex",
@@ -3104,6 +3105,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.18",
+ "whoami",
 ]
 
 [[package]]

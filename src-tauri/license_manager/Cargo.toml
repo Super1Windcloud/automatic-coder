@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 aes-gcm = { version = "0.10", features = ["aes"] }
 base64 = "0.22"
+dirs = "6.0.0"
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 hex = "0.4"
 rand = "0.9.2"
@@ -14,3 +15,4 @@ serde_json = "1.0"
 sha2 = "0.10.9"
 thiserror = "2.0.18"
 dotenv = "0.15.0"
+whoami = "2.1.1"
