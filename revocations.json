@@ -18,5 +18,15 @@
       "version": 1
     },
     "signature": "COz40bbHLJoFtmYQLXuEHhzk+sj3h24PRMZqMTb2fNbOxQtGQvv0tLkd+mNTVN7fGljXFsTjin2b8TzlskmEDw=="
+  },
+  {
+    "payload": {
+      "generated_at": 1776590651,
+      "revoked": [
+        "lic_20260419_171706"
+      ],
+      "version": 1
+    },
+    "signature": "8ym+ou+fvpFwqgmiUNWzeNHfrr+MwLis/7mMFku/ZXvmLMUlKCF7BxyPRQcqUcLvw15HRkTpc9YxWOQHHBW7Cw=="
   }
 ]
