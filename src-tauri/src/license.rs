@@ -79,6 +79,7 @@ pub struct IssuedLicensePreviewPayload {
     pub license_id: String,
     pub machine_id: String,
     pub customer: Option<String>,
+    pub revoked: bool,
 }
 
 #[derive(Clone)]
@@ -111,6 +112,8 @@ struct IssuedLicenseRecord {
     machine_id: String,
     customer: Option<String>,
     expires_at: Option<u64>,
+    #[serde(default)]
+    revoked: bool,
     signed_license: serde_json::Value,
 }
 
@@ -418,6 +421,7 @@ pub fn host_issue_license(
             machine_id,
             customer: normalized_customer,
             expires_at,
+            revoked: false,
             signed_license: signed_license_json,
         },
     )?;
@@ -425,7 +429,11 @@ pub fn host_issue_license(
 }
 
 #[tauri::command]
-pub fn host_sign_revocations(version: u64, revoked: Vec<String>) -> Result<String, String> {
+pub fn host_sign_revocations(
+    app_handle: AppHandle,
+    version: u64,
+    revoked: Vec<String>,
+) -> Result<String, String> {
     let private_key = load_host_private_key()?;
     let revoked = revoked
         .into_iter()
@@ -433,7 +441,11 @@ pub fn host_sign_revocations(version: u64, revoked: Vec<String>) -> Result<Strin
         .filter(|item| !item.is_empty())
         .collect::<Vec<_>>();
     let payload = license_manager::new_revocation_list(revoked, version);
-    license_manager::sign_revocation_list(&private_key, payload).map_err(|err| err.to_string())
+    let signed_payload =
+        license_manager::sign_revocation_list(&private_key, payload).map_err(|err| err.to_string())?;
+    sync_issued_license_revocations(&app_handle, &signed_payload)?;
+    persist_host_revocations(&app_handle, &signed_payload)?;
+    Ok(signed_payload)
 }
 
 #[tauri::command]
@@ -444,12 +456,14 @@ pub fn host_list_issued_licenses(
     let records = load_issued_license_records(&app_handle)?;
     Ok(records
         .into_iter()
+        .filter(|record| !record.revoked)
         .rev()
         .map(|record| IssuedLicensePreviewPayload {
             issued_at: record.issued_at,
             license_id: record.license_id,
             machine_id: record.machine_id,
             customer: record.customer,
+            revoked: record.revoked,
         })
         .collect())
 }
@@ -514,13 +528,13 @@ pub fn open_host_management_window(app_handle: &AppHandle) {
         .closable(true)
         .decorations(false)
         .visible(true)
+        .always_on_top(true)
         .skip_taskbar(false)
         .build()
         .expect("failed to create host management window");
 
     let _ = window.center();
     let _ = window.set_focus();
-    let _ = window.set_always_on_top(false);
     let _ = window.set_content_protected(false);
 }
 
@@ -655,6 +669,40 @@ fn persist_issued_license_record(
     .map_err(|err| err.to_string())
 }
 
+fn persist_host_revocations(app_handle: &AppHandle, signed_payload: &str) -> Result<(), String> {
+    let host_dir = resolve_host_management_dir(app_handle)?;
+    fs::create_dir_all(&host_dir).map_err(|err| err.to_string())?;
+    let path = host_dir.join(REVOCATION_CACHE_FILE_NAME);
+    let next_payload =
+        serde_json::from_str::<serde_json::Value>(signed_payload).map_err(|err| err.to_string())?;
+    let mut payloads = load_signed_revocation_payloads_from_path(&path)?;
+    payloads.push(next_payload);
+    fs::write(
+        path,
+        serde_json::to_string_pretty(&payloads).map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn sync_issued_license_revocations(app_handle: &AppHandle, signed_payload: &str) -> Result<(), String> {
+    let host_dir = resolve_host_management_dir(app_handle)?;
+    fs::create_dir_all(&host_dir).map_err(|err| err.to_string())?;
+    let path = host_dir.join(HOST_ISSUED_LICENSES_FILE_NAME);
+    let current_revocations_path = host_dir.join(REVOCATION_CACHE_FILE_NAME);
+    let mut payloads = load_signed_revocation_payloads_from_path(&current_revocations_path)?;
+    payloads.push(serde_json::from_str::<serde_json::Value>(signed_payload).map_err(|err| err.to_string())?);
+    let revoked = collect_revoked_ids_from_values(&payloads);
+    let mut records = load_issued_license_records(app_handle)?;
+    for record in &mut records {
+        record.revoked = revoked.contains(&record.license_id);
+    }
+    fs::write(
+        path,
+        serde_json::to_string_pretty(&records).map_err(|err| err.to_string())?,
+    )
+    .map_err(|err| err.to_string())
+}
+
 fn load_issued_license_records(app_handle: &AppHandle) -> Result<Vec<IssuedLicenseRecord>, String> {
     let path = resolve_host_management_dir(app_handle)?.join(HOST_ISSUED_LICENSES_FILE_NAME);
     if !path.exists() {
@@ -665,6 +713,35 @@ fn load_issued_license_records(app_handle: &AppHandle) -> Result<Vec<IssuedLicen
         return Ok(Vec::new());
     }
     serde_json::from_str::<Vec<IssuedLicenseRecord>>(&raw).map_err(|err| err.to_string())
+}
+
+fn load_signed_revocation_payloads_from_path(path: &Path) -> Result<Vec<serde_json::Value>, String> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let raw = fs::read_to_string(path).map_err(|err| err.to_string())?;
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let parsed = serde_json::from_str::<serde_json::Value>(&raw).map_err(|err| err.to_string())?;
+    match parsed {
+        serde_json::Value::Array(items) => Ok(items),
+        serde_json::Value::Object(_) => Ok(vec![parsed]),
+        _ => Err("invalid revocations.json format".into()),
+    }
+}
+
+fn collect_revoked_ids_from_values(
+    payloads: &[serde_json::Value],
+) -> std::collections::HashSet<String> {
+    payloads
+        .iter()
+        .filter_map(|entry| entry.get("payload"))
+        .filter_map(|payload| payload.get("revoked"))
+        .filter_map(|items| items.as_array())
+        .flat_map(|items| items.iter())
+        .filter_map(|item| item.as_str().map(|value| value.to_string()))
+        .collect()
 }
 
 fn load_valid_license_claims_from_dir(
@@ -731,10 +808,10 @@ async fn resolve_revocation_status(
                 if now_unix_seconds().saturating_sub(cached.fetched_at)
                     <= context.offline_grace_seconds
                 {
-                    let payload =
-                        verify_signed_revocation_list(&context.public_key, &cached.signed_payload)
+                    let revoked =
+                        extract_revoked_ids_from_signed_payloads(&context.public_key, &cached.signed_payload)
                             .map_err(|_| LicenseValidationError::InvalidSignature)?;
-                    return Ok(payload.revoked.iter().any(|item| item == license_id));
+                    return Ok(revoked.iter().any(|item| item == license_id));
                 }
             }
             Err(LicenseValidationError::RevocationUnavailable)
@@ -756,8 +833,7 @@ async fn fetch_and_cache_revocations(
         return Err(format!("unexpected status {}", response.status()));
     }
     let body = response.text().await.map_err(|err| err.to_string())?;
-    let payload =
-        verify_signed_revocation_list(&context.public_key, &body).map_err(|err| err.to_string())?;
+    let revoked = extract_revoked_ids_from_signed_payloads(&context.public_key, &body)?;
     let cache = RevocationCache {
         fetched_at: now_unix_seconds(),
         signed_payload: body,
@@ -768,7 +844,7 @@ async fn fetch_and_cache_revocations(
         serde_json::to_string_pretty(&cache).map_err(|err| err.to_string())?,
     )
     .map_err(|err| err.to_string())?;
-    Ok(payload.revoked)
+    Ok(revoked)
 }
 
 fn load_cached_revocations(
@@ -783,6 +859,27 @@ fn load_cached_revocations(
     let parsed: RevocationCache =
         serde_json::from_str(&raw).map_err(|_| LicenseValidationError::RevocationUnavailable)?;
     Ok(Some(parsed))
+}
+
+fn extract_revoked_ids_from_signed_payloads(
+    public_key: &str,
+    raw: &str,
+) -> Result<Vec<String>, String> {
+    let parsed = serde_json::from_str::<serde_json::Value>(raw).map_err(|err| err.to_string())?;
+    let entries = match parsed {
+        serde_json::Value::Array(items) => items,
+        serde_json::Value::Object(_) => vec![parsed],
+        _ => return Err("invalid revocation payload format".into()),
+    };
+
+    let mut revoked = Vec::new();
+    for entry in entries {
+        let signed = serde_json::to_string(&entry).map_err(|err| err.to_string())?;
+        let payload =
+            verify_signed_revocation_list(public_key, &signed).map_err(|err| err.to_string())?;
+        revoked.extend(payload.revoked);
+    }
+    Ok(revoked)
 }
 
 fn compute_machine_id() -> String {
