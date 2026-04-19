@@ -1,8 +1,8 @@
 {
   "payload": {
     "version": 1,
-    "generated_at": 1776574445,
-    "revoked": []
+    "generated_at": 1776579650,
+    "revoked": ["lic_mac"]
   },
-  "signature": "T2MPKB5bC2U+NVfShzeWLkML3/kQhu2qCRjg0fW2RCkoZvko6eVE/3JjXg9bYILGB7RWQ/wODYCJwsophRWyCg=="
+  "signature": "R7DsHzZxTu+PiOyVDuOSx4WmvXm0SH2ddAIyGBQ3RK2K5tw8WjXG6O+A83QRkqXZVK/CjsnvHWPirOMTf5wfBg=="
 }
