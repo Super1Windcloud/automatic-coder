@@ -27,10 +27,16 @@
         width: 100vw;
         height: 100vh;
         overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      .card::-webkit-scrollbar {
+        display: none;
       }
 
       .close-button {
-        position: absolute;
+        position: fixed;
         top: 14px;
         right: 14px;
         width: 36px;
@@ -43,19 +49,28 @@
         line-height: 1;
         border: none;
         cursor: pointer;
+        z-index: 100;
         app-region: no-drag;
         -webkit-app-region: no-drag;
       }
 
       .drag-bar {
-        margin: -10px -10px 18px;
-        padding: 10px 52px 10px 10px;
-        border-radius: 12px;
+        position: sticky;
+        top: 0;
+        margin: -28px -28px 0;
+        padding: 10px 52px 10px 38px;
+        border-radius: 0;
         cursor: grab;
         user-select: none;
-        background: rgba(255, 255, 255, 0.04);
+        background: rgba(16, 21, 27, 0.98);
+        backdrop-filter: blur(8px);
+        z-index: 10;
         app-region: drag;
         -webkit-app-region: drag;
+      }
+
+      .content-wrapper {
+        padding-top: 18px;
       }
 
       .drag-tip {
@@ -169,52 +184,54 @@
         <div class="drag-tip">只有当前打包机器码匹配时，才会显示这个入口</div>
       </div>
 
-      <div class="meta">
-        <div>当前公钥：<span id="public-key">加载中...</span></div>
-        <div>撤销列表地址：<span id="revocation-url">未配置</span></div>
+      <div class="content-wrapper">
+        <div class="meta">
+          <div>当前公钥：<span id="public-key">加载中...</span></div>
+          <div>撤销列表地址：<span id="revocation-url">未配置</span></div>
+        </div>
+
+        <section class="section">
+          <h3>签发许可证</h3>
+          <label for="machine-id-input">机器码</label>
+          <input id="machine-id-input" type="text" placeholder="从客户端激活窗口复制机器码" />
+
+          <label for="license-id-input">许可证 ID</label>
+          <input id="license-id-input" type="text" placeholder="例如 lic_20260419_001" />
+
+          <label for="expires-days-input">有效期（天，默认永久）</label>
+          <input id="expires-days-input" type="number" min="1" placeholder="留空表示永久，例如 30" />
+
+          <label for="customer-input">客户标识（可空）</label>
+          <input id="customer-input" type="text" placeholder="例如 alice / company-a" />
+
+          <div class="button-row">
+            <button id="issue-button" type="button">生成许可证</button>
+            <button id="issue-copy-button" class="ghost" type="button">复制结果</button>
+          </div>
+
+          <label for="issued-license-output">许可证输出</label>
+          <textarea id="issued-license-output" readonly placeholder="生成后的签名许可证会出现在这里"></textarea>
+          <div id="issue-status" class="status"></div>
+        </section>
+
+        <section class="section">
+          <h3>签名撤销列表</h3>
+          <label for="revocation-version-input">版本号</label>
+          <input id="revocation-version-input" type="number" min="1" value="1" />
+
+          <label for="revoked-ids-input">吊销的许可证 ID（每行一个）</label>
+          <textarea id="revoked-ids-input" placeholder="例如&#10;lic_20260419_001&#10;lic_20260419_002"></textarea>
+
+          <div class="button-row">
+            <button id="sign-revocation-button" type="button">生成撤销列表</button>
+            <button id="revocation-copy-button" class="ghost" type="button">复制结果</button>
+          </div>
+
+          <label for="signed-revocations-output">签名后的撤销列表</label>
+          <textarea id="signed-revocations-output" readonly placeholder="签名后的 revocations.json 内容"></textarea>
+          <div id="revocation-status" class="status"></div>
+        </section>
       </div>
-
-      <section class="section">
-        <h3>签发许可证</h3>
-        <label for="machine-id-input">机器码</label>
-        <input id="machine-id-input" type="text" placeholder="从客户端激活窗口复制机器码" />
-
-        <label for="license-id-input">许可证 ID</label>
-        <input id="license-id-input" type="text" placeholder="例如 lic_20260419_001" />
-
-        <label for="expires-days-input">有效期（天，默认永久）</label>
-        <input id="expires-days-input" type="number" min="1" placeholder="留空表示永久，例如 30" />
-
-        <label for="customer-input">客户标识（可空）</label>
-        <input id="customer-input" type="text" placeholder="例如 alice / company-a" />
-
-        <div class="button-row">
-          <button id="issue-button" type="button">生成许可证</button>
-          <button id="issue-copy-button" class="ghost" type="button">复制结果</button>
-        </div>
-
-        <label for="issued-license-output">许可证输出</label>
-        <textarea id="issued-license-output" readonly placeholder="生成后的签名许可证会出现在这里"></textarea>
-        <div id="issue-status" class="status"></div>
-      </section>
-
-      <section class="section">
-        <h3>签名撤销列表</h3>
-        <label for="revocation-version-input">版本号</label>
-        <input id="revocation-version-input" type="number" min="1" value="1" />
-
-        <label for="revoked-ids-input">吊销的许可证 ID（每行一个）</label>
-        <textarea id="revoked-ids-input" placeholder="例如&#10;lic_20260419_001&#10;lic_20260419_002"></textarea>
-
-        <div class="button-row">
-          <button id="sign-revocation-button" type="button">生成撤销列表</button>
-          <button id="revocation-copy-button" class="ghost" type="button">复制结果</button>
-        </div>
-
-        <label for="signed-revocations-output">签名后的撤销列表</label>
-        <textarea id="signed-revocations-output" readonly placeholder="签名后的 revocations.json 内容"></textarea>
-        <div id="revocation-status" class="status"></div>
-      </section>
     </div>
 
     <script type="module" src="/src/host.ts"></script>
