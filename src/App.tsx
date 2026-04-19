@@ -68,6 +68,7 @@ function App() {
   const [hasSolution, setHasSolution] = useState(false);
 
   const hasRegistered = useRef(false); // 使用 useRef 来确保只注册一次
+  const isActivatedRef = useRef(false);
   const blockReloadShortcut = (event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== "r") {
       return;
@@ -79,6 +80,9 @@ function App() {
   };
 
   const revealMainWindow = async () => {
+    if (!isActivatedRef.current) {
+      return;
+    }
     try {
       await invoke("show_window");
     } catch (err) {
@@ -88,6 +92,7 @@ function App() {
 
   useEffect(() => {
     let unlistenActivation: UnlistenFn | null = null;
+    let unlistenActivationRevoked: UnlistenFn | null = null;
     let unlistenOpacity: UnlistenFn | null = null;
     let unlistenBackgroundBroadcast: UnlistenFn | null = null;
 
@@ -108,15 +113,20 @@ function App() {
       try {
         const activated = await invoke<boolean>("get_activation_status");
         if (activated) {
+          isActivatedRef.current = true;
           await registerShortcuts();
           return;
         }
         unlistenActivation = await listen("activation_granted", async () => {
+          isActivatedRef.current = true;
           await registerShortcuts();
           if (unlistenActivation) {
             unlistenActivation();
             unlistenActivation = null;
           }
+        });
+        unlistenActivationRevoked = await listen("activation_revoked", async () => {
+          isActivatedRef.current = false;
         });
       } catch (err) {
         logger.error("activation bootstrap err", err);
@@ -181,6 +191,10 @@ function App() {
       if (unlistenOpacity) {
         unlistenOpacity();
         unlistenOpacity = null;
+      }
+      if (unlistenActivationRevoked) {
+        unlistenActivationRevoked();
+        unlistenActivationRevoked = null;
       }
       if (unlistenBackgroundBroadcast) {
         unlistenBackgroundBroadcast();
