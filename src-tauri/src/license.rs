@@ -16,7 +16,7 @@ use tauri::{
 use tokio::time::sleep;
 
 use crate::{
-    app_debug, app_error, app_warn,
+    app_debug, app_error, app_info, app_warn,
     config::{open_language_selector, preferences_require_onboarding},
     system::register_activation_shortcut,
     utils::is_dev,
@@ -283,7 +283,7 @@ pub async fn submit_activation_code(
         }
         Ok(false) => {}
         Err(_) => {
-            app_warn!(
+            app_info!(
                 "license",
                 "revocation check unavailable during activation; allowing local license to proceed"
             );
@@ -677,7 +677,7 @@ pub async fn refresh_runtime_license(app_handle: &AppHandle) -> Result<(), Strin
         Ok(true) => invalidate_runtime_license(app_handle, "revoked"),
         Ok(false) => {}
         Err(err) => {
-            app_warn!(
+            app_info!(
                 "license",
                 "revocation verification unavailable; keeping current license active: {err}"
             );
@@ -890,7 +890,7 @@ async fn resolve_revocation_status(
             matched
         })
         .map_err(|err| {
-            app_warn!("license", "failed to fetch remote revocations: {err}");
+            app_info!("license", "failed to fetch remote revocations: {err}");
             LicenseValidationError::RevocationUnavailable
         })
 }
@@ -975,7 +975,7 @@ fn extract_revoked_ids_from_signed_payloads(
                 payload
             }
             Err(err) => {
-                app_warn!(
+                app_info!(
                     "license",
                     "revocation entry verify failed index={}, version={}, generated_at={}, signature_prefix={}, error={}",
                     index,
