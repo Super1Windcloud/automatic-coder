@@ -50,7 +50,6 @@ struct LicenseInner {
     revocation_url: String,
     cache_dir: PathBuf,
     activated: bool,
-    offline_grace_seconds: u64,
     sync_interval_seconds: u64,
     client: Client,
 }
@@ -86,7 +85,6 @@ pub struct IssuedLicensePreviewPayload {
 pub struct LicenseBootstrap {
     pub public_key: String,
     pub revocation_url: String,
-    pub offline_grace_seconds: u64,
     pub sync_interval_seconds: u64,
 }
 
@@ -95,14 +93,7 @@ struct LicenseRuntimeContext {
     public_key: String,
     revocation_url: String,
     cache_dir: PathBuf,
-    offline_grace_seconds: u64,
     client: Client,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct RevocationCache {
-    fetched_at: u64,
-    signed_payload: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -151,7 +142,6 @@ impl LicenseState {
             revocation_url: bootstrap.revocation_url,
             cache_dir,
             activated,
-            offline_grace_seconds: bootstrap.offline_grace_seconds,
             sync_interval_seconds: bootstrap.sync_interval_seconds,
             client,
         });
@@ -195,7 +185,6 @@ impl LicenseState {
                 public_key: inner.public_key.clone(),
                 revocation_url: inner.revocation_url.clone(),
                 cache_dir: inner.cache_dir.clone(),
-                offline_grace_seconds: inner.offline_grace_seconds,
                 client: inner.client.clone(),
             })
     }
@@ -325,13 +314,6 @@ pub fn prepare_license_runtime(app_handle: &AppHandle) -> Result<Option<LicenseB
         .ok()
         .or_else(|| option_env!("LICENSE_REVOCATION_URL").map(|value| value.to_string()))
         .unwrap_or_default();
-    let offline_grace_seconds = env::var("LICENSE_OFFLINE_GRACE_HOURS")
-        .ok()
-        .or_else(|| option_env!("LICENSE_OFFLINE_GRACE_HOURS").map(|value| value.to_string()))
-        .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(72)
-        * 60
-        * 60;
     let sync_interval_seconds = env::var("LICENSE_SYNC_INTERVAL_SECONDS")
         .ok()
         .or_else(|| option_env!("LICENSE_SYNC_INTERVAL_SECONDS").map(|value| value.to_string()))
@@ -344,7 +326,6 @@ pub fn prepare_license_runtime(app_handle: &AppHandle) -> Result<Option<LicenseB
     Ok(Some(LicenseBootstrap {
         public_key,
         revocation_url,
-        offline_grace_seconds,
         sync_interval_seconds,
     }))
 }
@@ -802,26 +783,16 @@ async fn resolve_revocation_status(
         return Ok(false);
     }
 
-    match fetch_and_cache_revocations(context).await {
-        Ok(revoked) => Ok(revoked.iter().any(|item| item == license_id)),
-        Err(err) => {
+    fetch_remote_revocations(context)
+        .await
+        .map(|revoked| revoked.iter().any(|item| item == license_id))
+        .map_err(|err| {
             app_warn!("license", "failed to fetch remote revocations: {err}");
-            if let Some(cached) = load_cached_revocations(context)? {
-                if now_unix_seconds().saturating_sub(cached.fetched_at)
-                    <= context.offline_grace_seconds
-                {
-                    let revoked =
-                        extract_revoked_ids_from_signed_payloads(&context.public_key, &cached.signed_payload)
-                            .map_err(|_| LicenseValidationError::InvalidSignature)?;
-                    return Ok(revoked.iter().any(|item| item == license_id));
-                }
-            }
-            Err(LicenseValidationError::RevocationUnavailable)
-        }
-    }
+            LicenseValidationError::RevocationUnavailable
+        })
 }
 
-async fn fetch_and_cache_revocations(
+async fn fetch_remote_revocations(
     context: &LicenseRuntimeContext,
 ) -> Result<Vec<String>, String> {
     let response = context
@@ -835,32 +806,7 @@ async fn fetch_and_cache_revocations(
         return Err(format!("unexpected status {}", response.status()));
     }
     let body = response.text().await.map_err(|err| err.to_string())?;
-    let revoked = extract_revoked_ids_from_signed_payloads(&context.public_key, &body)?;
-    let cache = RevocationCache {
-        fetched_at: now_unix_seconds(),
-        signed_payload: body,
-    };
-    fs::create_dir_all(&context.cache_dir).map_err(|err| err.to_string())?;
-    fs::write(
-        context.cache_dir.join(REVOCATION_CACHE_FILE_NAME),
-        serde_json::to_string_pretty(&cache).map_err(|err| err.to_string())?,
-    )
-    .map_err(|err| err.to_string())?;
-    Ok(revoked)
-}
-
-fn load_cached_revocations(
-    context: &LicenseRuntimeContext,
-) -> Result<Option<RevocationCache>, LicenseValidationError> {
-    let path = context.cache_dir.join(REVOCATION_CACHE_FILE_NAME);
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw =
-        fs::read_to_string(path).map_err(|_| LicenseValidationError::RevocationUnavailable)?;
-    let parsed: RevocationCache =
-        serde_json::from_str(&raw).map_err(|_| LicenseValidationError::RevocationUnavailable)?;
-    Ok(Some(parsed))
+    extract_revoked_ids_from_signed_payloads(&context.public_key, &body)
 }
 
 fn extract_revoked_ids_from_signed_payloads(

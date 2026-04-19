@@ -119,7 +119,6 @@ fn check_activation_status_cheat(app: &mut App<Wry>) {
         let bootstrap = LicenseBootstrap {
             public_key: "DEV_KEY".into(),
             revocation_url: String::new(),
-            offline_grace_seconds: 72 * 60 * 60,
             sync_interval_seconds: 900,
         };
 
