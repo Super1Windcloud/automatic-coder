@@ -2,6 +2,7 @@ use crate::config::{
     open_custom_openai_selector, open_language_selector, persist_background_broadcast,
     persist_custom_openai_enabled, persist_page_opacity, toggle_vlm_model,
 };
+use crate::license::{host_management_available, open_host_management_window};
 use crate::lan::current_lan_urls;
 use crate::utils::{is_dev, toggle_webview_devtools};
 use crate::{app_debug, app_error, app_info};
@@ -288,6 +289,8 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         None::<&str>,
     )
     .unwrap();
+    let host_management =
+        MenuItem::with_id(app, "host_management", "本地宿主管理", true, None::<&str>).unwrap();
     let help_item = MenuItem::with_id(app, "help", "帮助信息", true, None::<&str>).unwrap();
     let background_broadcast = CheckMenuItem::with_id(
         app,
@@ -419,21 +422,40 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
         ],
     )
     .unwrap();
-    let menu = Menu::with_items(
-        app,
-        &[
-            &about_item,
-            &help_item,
-            &code_language,
-            &toggle_model,
-            &custom_openai_settings,
-            &custom_openai_enabled,
-            &background_broadcast,
-            &page_opacity_submenu,
-            &quit_i,
-        ],
-    )
-    .unwrap();
+    let menu = if host_management_available(app.handle()) {
+        Menu::with_items(
+            app,
+            &[
+                &about_item,
+                &help_item,
+                &host_management,
+                &code_language,
+                &toggle_model,
+                &custom_openai_settings,
+                &custom_openai_enabled,
+                &background_broadcast,
+                &page_opacity_submenu,
+                &quit_i,
+            ],
+        )
+        .unwrap()
+    } else {
+        Menu::with_items(
+            app,
+            &[
+                &about_item,
+                &help_item,
+                &code_language,
+                &toggle_model,
+                &custom_openai_settings,
+                &custom_openai_enabled,
+                &background_broadcast,
+                &page_opacity_submenu,
+                &quit_i,
+            ],
+        )
+        .unwrap()
+    };
 
     TrayIconBuilder::new()
         .menu(&menu)
@@ -485,6 +507,9 @@ pub fn create_tray_icon(app: &mut App<Wry>) {
             }
             "custom_openai_settings" => {
                 open_custom_openai_selector(app);
+            }
+            "host_management" => {
+                open_host_management_window(app);
             }
             "custom_openai_enabled" => match custom_openai_enabled_item.is_checked() {
                 Ok(enabled) => match persist_custom_openai_enabled(app, enabled) {

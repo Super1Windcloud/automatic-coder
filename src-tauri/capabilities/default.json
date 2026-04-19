@@ -5,8 +5,10 @@
   "windows": [
     "main",
     "updater",
+    "activation_gate",
     "code_language_selector",
-    "custom_openai_selector"
+    "custom_openai_selector",
+    "host_management"
   ],
   "allowlist": {
     "all": true

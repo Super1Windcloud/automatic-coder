@@ -62,6 +62,12 @@ pub struct ActivationAttemptPayload {
     pub activated: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct HostManagementContextPayload {
+    pub public_key: String,
+    pub revocation_url: String,
+}
+
 #[derive(Clone)]
 pub struct LicenseBootstrap {
     pub public_key: String,
@@ -315,6 +321,76 @@ pub fn prepare_license_runtime(app_handle: &AppHandle) -> Result<Option<LicenseB
     }))
 }
 
+pub fn host_management_available(_app_handle: &AppHandle) -> bool {
+    hydrate_activation_env();
+    let private_ready = env::var("LICENSE_PRIVATE_KEY")
+        .ok()
+        .or_else(|| option_env!("LICENSE_PRIVATE_KEY").map(|value| value.to_string()))
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let public_ready = env::var("LICENSE_PUBLIC_KEY")
+        .ok()
+        .or_else(|| option_env!("LICENSE_PUBLIC_KEY").map(|value| value.to_string()))
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    private_ready && public_ready
+}
+
+#[tauri::command]
+pub fn host_get_management_context() -> Result<HostManagementContextPayload, String> {
+    let private_key = load_host_private_key()?;
+    let public_key = env::var("LICENSE_PUBLIC_KEY")
+        .ok()
+        .or_else(|| option_env!("LICENSE_PUBLIC_KEY").map(|value| value.to_string()))
+        .unwrap_or_default();
+    let revocation_url = env::var("LICENSE_REVOCATION_URL")
+        .ok()
+        .or_else(|| option_env!("LICENSE_REVOCATION_URL").map(|value| value.to_string()))
+        .unwrap_or_default();
+
+    if public_key.trim().is_empty() {
+        return Err("missing LICENSE_PUBLIC_KEY".into());
+    }
+
+    let _ = private_key;
+    Ok(HostManagementContextPayload {
+        public_key,
+        revocation_url,
+    })
+}
+
+#[tauri::command]
+pub fn host_issue_license(
+    machine_id: String,
+    license_id: String,
+    expires_days: Option<u64>,
+    customer: Option<String>,
+) -> Result<String, String> {
+    let private_key = load_host_private_key()?;
+    let expires_at =
+        expires_days.map(|days| license_manager::now_unix_seconds() + days * 24 * 60 * 60);
+    let claims = license_manager::new_license_claims(
+        license_id,
+        machine_id,
+        customer.filter(|value| !value.trim().is_empty()),
+        expires_at,
+        vec!["base".to_string()],
+    );
+    license_manager::sign_license(&private_key, claims).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub fn host_sign_revocations(version: u64, revoked: Vec<String>) -> Result<String, String> {
+    let private_key = load_host_private_key()?;
+    let revoked = revoked
+        .into_iter()
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect::<Vec<_>>();
+    let payload = license_manager::new_revocation_list(revoked, version);
+    license_manager::sign_revocation_list(&private_key, payload).map_err(|err| err.to_string())
+}
+
 fn hydrate_activation_env() {
     let _ = from_filename("src-tauri/.env");
     let _ = dotenv();
@@ -345,6 +421,39 @@ pub fn open_activation_window(app_handle: &AppHandle) {
         .skip_taskbar(false)
         .build()
         .expect("failed to create activation window");
+
+    let _ = window.center();
+    let _ = window.set_focus();
+    let _ = window.set_always_on_top(false);
+    let _ = window.set_content_protected(false);
+}
+
+pub fn open_host_management_window(app_handle: &AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("host_management") {
+        let _ = window.set_always_on_top(true);
+        let _ = window.set_focus();
+        let _ = window.show();
+        return;
+    }
+
+    let url = if is_dev() {
+        WebviewUrl::App("host.html".into())
+    } else {
+        WebviewUrl::App("host/host.html".into())
+    };
+
+    let window = WebviewWindowBuilder::new(app_handle, "host_management", url)
+        .title("本地宿主管理")
+        .inner_size(820.0, 760.0)
+        .resizable(true)
+        .minimizable(true)
+        .maximizable(true)
+        .closable(true)
+        .decorations(false)
+        .visible(true)
+        .skip_taskbar(false)
+        .build()
+        .expect("failed to create host management window");
 
     let _ = window.center();
     let _ = window.set_focus();
@@ -629,4 +738,16 @@ fn now_unix_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+fn load_host_private_key() -> Result<String, String> {
+    hydrate_activation_env();
+    let private_key = env::var("LICENSE_PRIVATE_KEY")
+        .ok()
+        .or_else(|| option_env!("LICENSE_PRIVATE_KEY").map(|value| value.to_string()))
+        .unwrap_or_default();
+    if private_key.trim().is_empty() {
+        return Err("LICENSE_PRIVATE_KEY is not configured on this machine".into());
+    }
+    Ok(private_key)
 }
