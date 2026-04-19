@@ -58,7 +58,6 @@ publish:
     cn release upload--update-platform windows-x86_64 --channel prod --file <FILE>234sdfsdf $1.0.0
     cn release publish  --channel prod 234sdfsdf 1.0.0
 
-
 build:
     cd src-tauri && cargo build
 
@@ -70,7 +69,7 @@ license-machine-id:
     @echo "在客户端激活窗口复制机器码，或直接在应用内调用 get_machine_id 命令。"
 
 license-issue private_key machine_id license_id expires_days="" customer="":
-    cd src-tauri && cargo run -p license_manager --bin issue_license -- {{private_key}} {{machine_id}} {{license_id}} {{expires_days}} {{customer}}
+    cd src-tauri && cargo run -p license_manager --bin issue_license -- {{ private_key }} {{ machine_id }} {{ license_id }} {{ expires_days }} {{ customer }}
 
 license-sign-revocations private_key input_json output_json="":
-    cd src-tauri && cargo run -p license_manager --bin sign_revocations -- {{private_key}} {{input_json}} {{output_json}}
+    cd src-tauri && cargo run -p license_manager --bin sign_revocations -- {{ private_key }} {{ input_json }} {{ output_json }}
