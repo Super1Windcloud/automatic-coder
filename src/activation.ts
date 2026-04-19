@@ -20,6 +20,9 @@ const statusBox = document.getElementById(
 const machineIdBox = document.getElementById(
   'machine-id',
 ) as HTMLDivElement | null
+const copyMachineIdButton = document.getElementById(
+  'copy-machine-id',
+) as HTMLButtonElement | null
 const submitButton = document.querySelector<HTMLButtonElement>('button.submit')
 const logger = createScopedLogger('activation')
 
@@ -66,6 +69,56 @@ async function loadMachineId() {
   } catch (err) {
     logger.error('failed to load machine id', err)
   }
+}
+
+async function copyMachineId() {
+  const machineId = machineIdBox?.textContent?.trim() || ''
+  if (!machineId || machineId === '正在读取...') {
+    updateStatus('机器码尚未准备好。', 'error')
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(machineId)
+    updateStatus('机器码已复制到剪贴板。', 'success')
+  } catch (err) {
+    logger.error('copy machine id failed', err)
+    updateStatus('复制机器码失败，请手动复制。', 'error')
+  }
+}
+
+function formatActivationJson(raw: string) {
+  const trimmed = raw.trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return raw
+  }
+
+  try {
+    return `${JSON.stringify(JSON.parse(trimmed), null, 2)}\n`
+  } catch {
+    return raw
+  }
+}
+
+function handleTextareaPaste(event: ClipboardEvent) {
+  if (!textarea) {
+    return
+  }
+
+  const pastedText = event.clipboardData?.getData('text')
+  if (!pastedText) {
+    return
+  }
+
+  const formatted = formatActivationJson(pastedText)
+  if (formatted === pastedText) {
+    return
+  }
+
+  event.preventDefault()
+  const start = textarea.selectionStart ?? textarea.value.length
+  const end = textarea.selectionEnd ?? textarea.value.length
+  textarea.setRangeText(formatted, start, end, 'end')
 }
 
 async function handleSubmit(event: Event) {
@@ -146,5 +199,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await ensureState()
   await loadMachineId()
   textarea?.focus()
+  copyMachineIdButton?.addEventListener('click', copyMachineId)
+  textarea?.addEventListener('paste', handleTextareaPaste)
   form?.addEventListener('submit', handleSubmit)
 })
