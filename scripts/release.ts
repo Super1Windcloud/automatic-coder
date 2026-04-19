@@ -28,7 +28,15 @@ function bumpPatchVersion(version: string) {
     throw new Error(`Version contains non-numeric segments: ${version}`);
   }
 
-  return `${major}.${minor}.${patch + 1}`;
+  const normalized = [major, minor, patch + 1];
+
+  for (let index = normalized.length - 1; index > 0; index -= 1) {
+    const carry = Math.floor(normalized[index] / 10);
+    normalized[index] %= 10;
+    normalized[index - 1] += carry;
+  }
+
+  return normalized.join('.');
 }
 
 function updateCargoTomlVersion(fileContent: string, nextVersion: string) {

@@ -16,7 +16,10 @@ use tauri::{
 };
 use tempfile::NamedTempFile;
 
-use crate::{app_debug, app_info, app_warn, system::register_activation_shortcut, utils::is_dev};
+use crate::{
+    app_debug, app_info, app_warn, config::open_language_selector,
+    system::register_activation_shortcut, utils::is_dev,
+};
 const REMOTE_ACTIVATION_FILE: &str = "activation_codes.enc";
 const DEFAULT_ACTIVATION_REMOTE_URL: &str = "https://raw.githubusercontent.com/Super1Windcloud/automatic-coder/refs/heads/master/src-tauri/enc/activation_codes.enc";
 const ACTIVATION_STATUS_FILE: [&str; 2] = [
@@ -203,6 +206,7 @@ pub async fn submit_activation_code(
             if let Some(main) = app.get_webview_window("main") {
                 reveal_main_window(main);
             }
+            open_language_selector(&app);
             let _ = app.emit("activation_granted", true);
             Ok(ActivationAttemptPayload {
                 success: true,
