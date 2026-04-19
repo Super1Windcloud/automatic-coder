@@ -24,6 +24,7 @@ use crate::{
 
 const LICENSE_FILE_NAME: &str = "license.json";
 const REVOCATION_CACHE_FILE_NAME: &str = "revocations.json";
+const HOST_ISSUED_LICENSES_FILE_NAME: &str = "issued_licenses.json";
 const DEFAULT_REVOCATION_SYNC_INTERVAL_SECS: u64 = 900;
 const HOST_MACHINE_ID: &str =
     "e387c89a24daa5544b9d4b795f8a28af5b23b5c080839e07558e7311aac14a11";
@@ -93,6 +94,16 @@ struct LicenseRuntimeContext {
 struct RevocationCache {
     fetched_at: u64,
     signed_payload: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct IssuedLicenseRecord {
+    issued_at: u64,
+    license_id: String,
+    machine_id: String,
+    customer: Option<String>,
+    expires_at: Option<u64>,
+    signed_license: String,
 }
 
 #[derive(Debug)]
@@ -370,6 +381,7 @@ pub fn host_get_management_context() -> Result<HostManagementContextPayload, Str
 
 #[tauri::command]
 pub fn host_issue_license(
+    app_handle: AppHandle,
     machine_id: String,
     license_id: String,
     expires_days: Option<u64>,
@@ -378,14 +390,28 @@ pub fn host_issue_license(
     let private_key = load_host_private_key()?;
     let expires_at =
         expires_days.map(|days| license_manager::now_unix_seconds() + days * 24 * 60 * 60);
+    let normalized_customer = customer.filter(|value| !value.trim().is_empty());
     let claims = license_manager::new_license_claims(
-        license_id,
-        machine_id,
-        customer.filter(|value| !value.trim().is_empty()),
+        license_id.clone(),
+        machine_id.clone(),
+        normalized_customer.clone(),
         expires_at,
         vec!["base".to_string()],
     );
-    license_manager::sign_license(&private_key, claims).map_err(|err| err.to_string())
+    let signed_license =
+        license_manager::sign_license(&private_key, claims).map_err(|err| err.to_string())?;
+    persist_issued_license_record(
+        &app_handle,
+        IssuedLicenseRecord {
+            issued_at: now_unix_seconds(),
+            license_id,
+            machine_id,
+            customer: normalized_customer,
+            expires_at,
+            signed_license: signed_license.clone(),
+        },
+    )?;
+    Ok(signed_license)
 }
 
 #[tauri::command]
@@ -567,11 +593,46 @@ fn resolve_license_cache_dir(app_handle: &AppHandle) -> Result<PathBuf, String> 
         .map_err(|err| format!("failed to resolve license cache dir: {err}"))
 }
 
+fn resolve_host_management_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    app_handle
+        .path()
+        .app_local_data_dir()
+        .map(|dir| dir.join("host-management"))
+        .map_err(|err| format!("failed to resolve host management dir: {err}"))
+}
+
 fn persist_license(context: &LicenseRuntimeContext, signed_license: &str) -> Result<(), String> {
     fs::create_dir_all(&context.cache_dir).map_err(|err| err.to_string())?;
     fs::write(
         context.cache_dir.join(LICENSE_FILE_NAME),
         signed_license.trim(),
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn persist_issued_license_record(
+    app_handle: &AppHandle,
+    record: IssuedLicenseRecord,
+) -> Result<(), String> {
+    let host_dir = resolve_host_management_dir(app_handle)?;
+    fs::create_dir_all(&host_dir).map_err(|err| err.to_string())?;
+
+    let path = host_dir.join(HOST_ISSUED_LICENSES_FILE_NAME);
+    let mut records = if path.exists() {
+        let raw = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+        if raw.trim().is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str::<Vec<IssuedLicenseRecord>>(&raw).map_err(|err| err.to_string())?
+        }
+    } else {
+        Vec::new()
+    };
+
+    records.push(record);
+    fs::write(
+        path,
+        serde_json::to_string_pretty(&records).map_err(|err| err.to_string())?,
     )
     .map_err(|err| err.to_string())
 }

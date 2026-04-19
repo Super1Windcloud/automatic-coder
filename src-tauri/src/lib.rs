@@ -12,7 +12,7 @@ use crate::{
         LicenseBootstrap, LicenseState, get_activation_status, get_machine_id,
         host_get_management_context, host_issue_license, host_sign_revocations,
         open_activation_window, prepare_license_runtime, show_main_window_now,
-        start_revocation_monitor, submit_activation_code,
+        refresh_runtime_license, start_revocation_monitor, submit_activation_code,
     },
 };
 use capture::*;
@@ -150,6 +150,13 @@ fn check_activation_status(app: &mut App<Wry>) {
                 }
                 open_activation_window(app.handle());
             } else {
+                if let Err(err) = tauri::async_runtime::block_on(refresh_runtime_license(app.handle()))
+                {
+                    app_warn!("app", "startup revocation check failed: {err}");
+                }
+                if !state.is_activated() {
+                    return;
+                }
                 register_activation_shortcut(app.handle());
                 if preferences_require_onboarding() {
                     open_language_selector(app.handle());
