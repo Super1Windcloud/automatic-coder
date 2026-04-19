@@ -10,6 +10,7 @@ use crate::{
     config::AppState,
     license::{
         LicenseBootstrap, LicenseState, get_activation_status, get_machine_id,
+        host_diagnose_revocations,
         host_get_management_context, host_issue_license, host_list_issued_licenses,
         host_sign_revocations, open_activation_window, prepare_license_runtime,
         refresh_runtime_license, show_main_window_now, start_revocation_monitor,
@@ -85,6 +86,7 @@ pub fn run() {
             set_background_broadcast,
             get_activation_status,
             get_machine_id,
+            host_diagnose_revocations,
             host_get_management_context,
             host_issue_license,
             host_list_issued_licenses,

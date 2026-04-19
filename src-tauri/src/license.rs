@@ -81,6 +81,25 @@ pub struct IssuedLicensePreviewPayload {
     pub revoked: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct RevocationDiagnosticItemPayload {
+    pub index: usize,
+    pub ok: bool,
+    pub version: Option<u64>,
+    pub generated_at: Option<u64>,
+    pub revoked_count: Option<usize>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RevocationDiagnosticPayload {
+    pub path: String,
+    pub total: usize,
+    pub valid: usize,
+    pub invalid: usize,
+    pub items: Vec<RevocationDiagnosticItemPayload>,
+}
+
 #[derive(Clone)]
 pub struct LicenseBootstrap {
     pub public_key: String,
@@ -447,6 +466,74 @@ pub fn host_list_issued_licenses(
             revoked: record.revoked,
         })
         .collect())
+}
+
+#[tauri::command]
+pub fn host_diagnose_revocations() -> Result<RevocationDiagnosticPayload, String> {
+    let public_key = env::var("LICENSE_PUBLIC_KEY")
+        .ok()
+        .or_else(|| option_env!("LICENSE_PUBLIC_KEY").map(|value| value.to_string()))
+        .unwrap_or_default();
+    if public_key.trim().is_empty() {
+        return Err("missing LICENSE_PUBLIC_KEY".into());
+    }
+
+    let path = env::current_dir()
+        .map_err(|err| err.to_string())?
+        .join(REVOCATION_CACHE_FILE_NAME);
+    let entries = load_signed_revocation_payloads_from_path(&path)?;
+    let mut items = Vec::with_capacity(entries.len());
+    let mut valid = 0usize;
+
+    for (index, entry) in entries.iter().enumerate() {
+        let version = entry
+            .get("payload")
+            .and_then(|payload| payload.get("version"))
+            .and_then(|value| value.as_u64());
+        let generated_at = entry
+            .get("payload")
+            .and_then(|payload| payload.get("generated_at"))
+            .and_then(|value| value.as_u64());
+        let revoked_count = entry
+            .get("payload")
+            .and_then(|payload| payload.get("revoked"))
+            .and_then(|value| value.as_array())
+            .map(|items| items.len());
+
+        let signed = serde_json::to_string(entry).map_err(|err| err.to_string())?;
+        match verify_signed_revocation_list(&public_key, &signed) {
+            Ok(_) => {
+                valid += 1;
+                items.push(RevocationDiagnosticItemPayload {
+                    index,
+                    ok: true,
+                    version,
+                    generated_at,
+                    revoked_count,
+                    error: None,
+                });
+            }
+            Err(err) => {
+                items.push(RevocationDiagnosticItemPayload {
+                    index,
+                    ok: false,
+                    version,
+                    generated_at,
+                    revoked_count,
+                    error: Some(err.to_string()),
+                });
+            }
+        }
+    }
+
+    let total = items.len();
+    Ok(RevocationDiagnosticPayload {
+        path: path.display().to_string(),
+        total,
+        valid,
+        invalid: total.saturating_sub(valid),
+        items,
+    })
 }
 
 fn hydrate_activation_env() {
