@@ -33,19 +33,37 @@ macro_rules! app_debug {
 }
 
 pub fn get_env_key(key_name: &str) -> String {
-    env::var(key_name).unwrap_or_else(|_| {
-        let result: PreferencesConfig =
-            load_config("interview-coder-config", "preferences").unwrap();
-
-        if result.vlm_key.is_empty() {
-            app_warn!("utils", "环境变量 {} 未设置，请设置后重试", key_name);
-            String::new()
-        } else {
-            #[cfg(target_os = "macos")]
-            app_info!("utils", "环境变量 {} 已设置", key_name);
-            result.vlm_key.to_string()
+    if let Ok(value) = env::var(key_name) {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
         }
-    })
+    }
+
+    if let Some(value) = get_embedded_env_key(key_name) {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    let result: PreferencesConfig = load_config("interview-coder-config", "preferences").unwrap();
+
+    if result.vlm_key.is_empty() {
+        app_warn!("utils", "环境变量 {} 未设置，请设置后重试", key_name);
+        String::new()
+    } else {
+        #[cfg(target_os = "macos")]
+        app_info!("utils", "环境变量 {} 已设置", key_name);
+        result.vlm_key.to_string()
+    }
+}
+
+fn get_embedded_env_key(key_name: &str) -> Option<&'static str> {
+    match key_name {
+        "SiliconflowVLM" => option_env!("SiliconflowVLM"),
+        _ => None,
+    }
 }
 
 pub fn get_custom_openai_config() -> (bool, String, String, String) {

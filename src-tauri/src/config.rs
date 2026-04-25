@@ -145,6 +145,7 @@ pub enum DirectionEnum {
 }
 
 pub fn load_preferences(app: &mut App) {
+    hydrate_embedded_vlm_key();
     let result = load_config("interview-coder-config", "preferences");
     if let Ok(config) = result {
         let preferences: PreferencesConfig = config;
@@ -179,6 +180,33 @@ pub fn load_preferences(app: &mut App) {
         }
     } else {
         app_warn!("config", "failed to load preferences");
+    }
+}
+
+fn hydrate_embedded_vlm_key() {
+    let Some(embedded_key) = option_env!("SiliconflowVLM") else {
+        return;
+    };
+    let embedded_key = embedded_key.trim();
+    if embedded_key.is_empty() {
+        return;
+    }
+
+    let mut cfg: PreferencesConfig = match confy::load("interview-coder-config", "preferences") {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            app_warn!("config", "failed to load preferences while hydrating VLM key: {err}");
+            return;
+        }
+    };
+
+    if !cfg.vlm_key.trim().is_empty() {
+        return;
+    }
+
+    cfg.vlm_key = embedded_key.to_string();
+    if let Err(err) = confy::store("interview-coder-config", "preferences", cfg) {
+        app_warn!("config", "failed to persist embedded VLM key: {err}");
     }
 }
 

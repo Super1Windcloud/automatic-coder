@@ -2,7 +2,7 @@ use dirs::home_dir;
 use sha2::{Digest, Sha256};
 use std::{env, fs};
 
-const EMBED_KEYS: [&str; 9] = [
+const EMBED_KEYS: [&str; 10] = [
     "ACTIVATION_MASTER_KEY",
     "ACTIVATION_REMOTE_TOKEN",
     "ACTIVATION_REMOTE_OWNER",
@@ -12,6 +12,7 @@ const EMBED_KEYS: [&str; 9] = [
     "LICENSE_PRIVATE_KEY",
     "LICENSE_PUBLIC_KEY",
     "LICENSE_REVOCATION_URL",
+    "SiliconflowVLM",
 ];
 
 fn main() {
